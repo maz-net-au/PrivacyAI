@@ -15,6 +15,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -130,12 +132,12 @@ fun StatusRing() {
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
             )
             HorizontalDivider()
-            DropdownMenuItem(text = { Text("Settings") }, onClick = {
+            DropdownMenuItem(text = { Text("Settings") }, leadingIcon = { Icon(Icons.Filled.Settings, null) }, onClick = {
                 open = false
                 nav.navigate(Routes.SETTINGS) { launchSingleTop = true }
             })
             if (app.session.hasPin) {
-                DropdownMenuItem(text = { Text("Lock") }, onClick = { open = false; app.session.lock() })
+                DropdownMenuItem(text = { Text("Lock") }, leadingIcon = { Icon(Icons.Filled.Lock, null) }, onClick = { open = false; app.session.lock() })
             }
         }
     }

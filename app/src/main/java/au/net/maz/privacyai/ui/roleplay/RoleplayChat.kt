@@ -1,5 +1,6 @@
 package au.net.maz.privacyai.ui.roleplay
 
+import au.net.maz.privacyai.data.model.MediaInfo
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Color
@@ -102,6 +103,8 @@ fun RoleplayChatScreen(id: String) {
     var input by kept("input") { "" }
     // The message whose buttons are showing (tap a message to show/hide them).
     var selectedId by kept<String?>("selected") { null }
+    // Generated images shown in the tray so far (they start hidden). Memory only.
+    val revealed = screenState("revealed") { mutableStateListOf<String>() }
     val attachments = screenState("attachments") { mutableStateListOf<Attachment>() }
     var speaker by kept<String?>("speaker") { null }
     var editing by kept<String?>("editing") { null }
@@ -238,6 +241,33 @@ fun RoleplayChatScreen(id: String) {
             }
             // While a message is being edited (in place, above), the input is hidden for room.
             if (editing == null) {
+                // Generations not sent yet: everything generated for this roleplay that isn't
+                // in a message (or a character's reference image).
+                val gallery by store.observeMedia(owner).collectAsState(initial = emptyList())
+                val used = remember(rp) {
+                    rp.messages.flatMap { m -> m.attachments.map { it.mediaId } }.toSet() + rp.characters.mapNotNull { it.referenceImage }
+                }
+                val unsent = gallery.filter {
+                    it.info.origin == MediaInfo.ORIGIN_GENERATED && it.id !in used && it.kind != MediaKind.AUDIO
+                }
+                val settings by store.settings.collectAsState(initial = null)
+                GenerationTray(
+                    items = unsent,
+                    open = settings?.generationTrayOpen ?: true,
+                    onToggleOpen = { scope.launch { store.updateSettings { it.copy(generationTrayOpen = !it.generationTrayOpen) } } },
+                    revealed = revealed.toSet(),
+                    onReveal = { revealed += it },
+                    attached = attachments.map { it.mediaId }.toSet(),
+                    onToggleAttach = { m ->
+                        if (attachments.any { it.mediaId == m.id }) attachments.removeAll { it.mediaId == m.id }
+                        else attachments += Attachment(m.id, m.info.description)
+                    },
+                    onView = { m -> nav.navigate(Routes.viewer(m.id)) }, // just this one: the others may still be hidden
+                    onDelete = { m ->
+                        attachments.removeAll { it.mediaId == m.id }
+                        scope.launch { app.runner?.cancelForMedia(m.id); store.deleteMedia(m.id) }
+                    },
+                )
                 ChatInput(
                     text = input,
                     onText = { input = it },

@@ -34,6 +34,8 @@ data class Settings(
     val characterFieldMaxTokens: Int = 1200,
     val myDescriptionMaxTokens: Int = 1200,
     val summaryMaxTokens: Int = 5000,
+    /** Roleplay chat: whether the "generated, not sent" strip is expanded. */
+    val generationTrayOpen: Boolean = true,
 ) {
     companion object {
         /** Taken from the old app (SceneImageConfig.SYSTEM_PROMPT). */

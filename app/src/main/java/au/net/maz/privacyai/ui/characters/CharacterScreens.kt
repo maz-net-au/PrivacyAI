@@ -1,5 +1,13 @@
 package au.net.maz.privacyai.ui.characters
 
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
+import au.net.maz.privacyai.ui.components.MenuItem
+import au.net.maz.privacyai.data.CharacterYaml
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.SnackbarHostState
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -95,14 +103,45 @@ private fun CharacterRow(c: Character, modifier: Modifier = Modifier) {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun CharacterListScreen() {
+    val app = LocalApp.current
     val store = LocalStore.current
     val nav = LocalNav.current
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val list by store.characters.collectAsState(initial = emptyList())
     val settings by store.settings.collectAsState(initial = null)
+    val snackbar = remember { SnackbarHostState() }
+
+    // Import a .yaml character: create it with a random colour, then open it for editing.
+    val yamlPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            runCatching {
+                val text = withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        val bytes = input.readNBytesCompat(MAX_YAML_BYTES + 1)
+                        if (bytes.size > MAX_YAML_BYTES) error("The file is too large")
+                        bytes.decodeToString()
+                    } ?: error("Couldn't open the file")
+                }
+                val parsed = CharacterYaml.parse(text)
+                val c = Character(
+                    name = parsed.name,
+                    greeting = parsed.greeting,
+                    systemPrompt = parsed.context,
+                    colour = app.randomCharacterColour(),
+                )
+                store.saveCharacter(c)
+                c
+            }.onSuccess { nav.navigate(Routes.character("main", it.id)) }
+                .onFailure { snackbar.showSnackbar(it.message ?: "Import failed") }
+        }
+    }
+
     AppScaffold(
         title = "Characters",
         onBack = { nav.popBackStack() },
+        snackbar = snackbar,
+        menu = listOf(MenuItem("Import character") { yamlPicker.launch(arrayOf("*/*")) }),
         floatingActionButton = {
             FloatingActionButton(onClick = { nav.navigate(Routes.character("main", "new")) }) { Icon(Icons.Filled.Add, "New character") }
         },
@@ -309,4 +348,18 @@ fun CharacterEditScreen(owner: String, routeId: String) {
             }
         }
     }
+}
+
+private const val MAX_YAML_BYTES = 1024 * 1024
+
+/** Read at most [limit] bytes (InputStream.readNBytes needs API 33). */
+private fun java.io.InputStream.readNBytesCompat(limit: Int): ByteArray {
+    val out = java.io.ByteArrayOutputStream()
+    val buf = ByteArray(8192)
+    while (out.size() < limit) {
+        val n = read(buf, 0, minOf(buf.size, limit - out.size()))
+        if (n < 0) break
+        out.write(buf, 0, n)
+    }
+    return out.toByteArray()
 }

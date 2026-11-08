@@ -94,4 +94,16 @@ class LogicTest {
         assertEquals("one", back.text)
         assertEquals(listOf("one (edited)", "two"), back.withText("one (edited)").versions)
     }
+
+    @Test
+    fun characterYaml() {
+        val p = au.net.maz.privacyai.data.CharacterYaml.parse(
+            "name: Lydia\ngreeting: \"Hello, {{user}}.\"\ncontext: |\n  Line one.\n  Line two.\nextra: ignored\n"
+        )
+        assertEquals("Lydia", p.name)
+        assertEquals("Hello, {{user}}.", p.greeting)
+        assertEquals("Line one.\nLine two.", p.context)
+        assertEquals("", au.net.maz.privacyai.data.CharacterYaml.parse("name: Bob").greeting)
+        assertTrue(runCatching { au.net.maz.privacyai.data.CharacterYaml.parse("greeting: hi") }.isFailure)
+    }
 }

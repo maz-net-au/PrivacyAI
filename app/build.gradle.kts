@@ -72,6 +72,9 @@ dependencies {
     // Streaming authenticated encryption for media files (seekable, for video playback).
     implementation("com.google.crypto.tink:tink-android:1.13.0")
 
+    // Character import (simple YAML: name / greeting / context), as in the old app.
+    implementation("org.yaml:snakeyaml:2.2")
+
     // Networking + JSON
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:okhttp-sse:4.12.0")

@@ -1,5 +1,8 @@
 package au.net.maz.privacyai.ui.settings
 
+import au.net.maz.privacyai.ui.kept
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.Tab
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -47,116 +50,175 @@ import kotlinx.coroutines.launch
 /** Settings, grouped. (The full reorganisation is still to be discussed.) */
 @Composable
 fun SettingsScreen() {
-    val app = LocalApp.current
     val store = LocalStore.current
     val nav = LocalNav.current
     val scope = rememberCoroutineScope()
     val loaded by store.settings.collectAsState(initial = null)
     val settings = loaded ?: return
+
+    fun update(f: (Settings) -> Settings) { scope.launch { store.updateSettings(f) } }
+
+    var tab by kept("tab") { 0 }
+
+    AppScaffold(title = "Settings", onBack = { nav.popBackStack() }) { pad ->
+        Column(Modifier.padding(pad).fillMaxSize()) {
+            TabRow(selectedTabIndex = tab) {
+                Tab(selected = tab == 0, onClick = { tab = 0 }, text = { Text("General") })
+                Tab(selected = tab == 1, onClick = { tab = 1 }, text = { Text("Roleplay") })
+            }
+            Column(
+                Modifier.fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Column(Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(bottom = 32.dp)) {
+                    if (tab == 0) GeneralSettings(settings, ::update) else RoleplaySettings(settings, ::update)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun GeneralSettings(settings: Settings, update: (( Settings) -> Settings) -> Unit) {
+    val app = LocalApp.current
+    val store = LocalStore.current
+    val nav = LocalNav.current
     val characters by store.characters.collectAsState(initial = emptyList())
     val presets by store.presets.collectAsState(initial = emptyList())
     val health by app.health.state.collectAsState()
-
-    fun update(f: (Settings) -> Settings) = scope.launch { store.updateSettings(f) }
 
     // Text fields keep their own state and save as you type.
     var llm by remember { mutableStateOf(settings.llmAddress) }
     var image by remember { mutableStateOf(settings.imageAddress) }
     var minutes by remember { mutableStateOf(settings.inactivityMinutes.toString()) }
+
+    SectionTitle("Servers")
+    OutlinedTextField(
+        value = llm,
+        onValueChange = { v -> llm = v.trim(); update { it.copy(llmAddress = v.trim()) } },
+        label = { Text("LLM server address (with port)") },
+        placeholder = { Text("192.168.1.50:8080") },
+        supportingText = { Text(statusText(health.llm)) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrect = false),
+        modifier = Modifier.fillMaxWidth(),
+    )
+    OutlinedTextField(
+        value = image,
+        onValueChange = { v -> image = v.trim(); update { it.copy(imageAddress = v.trim()) } },
+        label = { Text("Image generator address (with port)") },
+        placeholder = { Text("192.168.1.50:8188") },
+        supportingText = { Text(statusText(health.image)) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrect = false),
+        modifier = Modifier.fillMaxWidth(),
+    )
+
+    SectionTitle("Security")
+    if (app.session.hasPin) {
+        OutlinedTextField(
+            value = minutes,
+            onValueChange = { v ->
+                minutes = v.filter { it.isDigit() }.take(4)
+                minutes.toIntOrNull()?.takeIf { it > 0 }?.let { m -> update { it.copy(inactivityMinutes = m) } }
+            },
+            label = { Text("Lock after inactivity (minutes)") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth(),
+        )
+    } else {
+        Text("Locking is off because no PIN is set.", style = MaterialTheme.typography.bodyMedium)
+    }
+    PinSection()
+
+    SectionTitle("Chat")
+    ModelPicker("Model", settings.chatModel.ifBlank { null }, { m -> update { it.copy(chatModel = m.orEmpty()) } })
+    Dropdown(
+        label = "Character",
+        options = characters,
+        selected = characters.firstOrNull { it.id == settings.chatCharacterId },
+        onSelect = { c -> update { it.copy(chatCharacterId = c.id) } },
+        display = { it.name.ifBlank { "(unnamed)" } },
+        placeholder = "None",
+        modifier = Modifier.padding(top = 8.dp),
+    )
+    Dropdown(
+        label = "Preset",
+        options = presets.map { it.name },
+        selected = settings.chatPreset,
+        onSelect = { p -> update { it.copy(chatPreset = p) } },
+        display = { it },
+        modifier = Modifier.padding(top = 8.dp),
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+        OutlinedButton(onClick = { nav.navigate(Routes.CHARACTERS) }) { Text("Edit characters") }
+        OutlinedButton(onClick = { nav.navigate(Routes.PRESETS) }) { Text("Edit presets") }
+    }
+
+    SectionTitle("Generate limits")
+    Text(
+        "Most tokens the LLM may write for each Generate. A thinking model's reasoning counts too.",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    TokenField("Character fields (greeting, persona, state)", settings.characterFieldMaxTokens) { n ->
+        update { it.copy(characterFieldMaxTokens = n) }
+    }
+}
+
+@Composable
+private fun RoleplaySettings(settings: Settings, update: ((Settings) -> Settings) -> Unit) {
     var promptSystem by remember { mutableStateOf(settings.imagePromptSystem) }
 
-    AppScaffold(title = "Settings", onBack = { nav.popBackStack() }) { pad ->
-        Column(
-            Modifier.padding(pad).fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Column(Modifier.widthIn(max = 640.dp).fillMaxWidth().padding(bottom = 32.dp)) {
-                SectionTitle("Servers")
-                OutlinedTextField(
-                    value = llm,
-                    onValueChange = { v -> llm = v.trim(); update { it.copy(llmAddress = v.trim()) } },
-                    label = { Text("LLM server address (with port)") },
-                    placeholder = { Text("192.168.1.50:8080") },
-                    supportingText = { Text(statusText(health.llm)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrect = false),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = image,
-                    onValueChange = { v -> image = v.trim(); update { it.copy(imageAddress = v.trim()) } },
-                    label = { Text("Image generator address (with port)") },
-                    placeholder = { Text("192.168.1.50:8188") },
-                    supportingText = { Text(statusText(health.image)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, autoCorrect = false),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                SectionTitle("Security")
-                if (app.session.hasPin) {
-                    OutlinedTextField(
-                        value = minutes,
-                        onValueChange = { v ->
-                            minutes = v.filter { it.isDigit() }.take(4)
-                            minutes.toIntOrNull()?.takeIf { it > 0 }?.let { m -> update { it.copy(inactivityMinutes = m) } }
-                        },
-                        label = { Text("Lock after inactivity (minutes)") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                } else {
-                    Text("Locking is off because no PIN is set.", style = MaterialTheme.typography.bodyMedium)
-                }
-                PinSection()
-
-                SectionTitle("Chat")
-                ModelPicker("Model", settings.chatModel.ifBlank { null }, { m -> update { it.copy(chatModel = m.orEmpty()) } })
-                Dropdown(
-                    label = "Character",
-                    options = characters,
-                    selected = characters.firstOrNull { it.id == settings.chatCharacterId },
-                    onSelect = { c -> update { it.copy(chatCharacterId = c.id) } },
-                    display = { it.name.ifBlank { "(unnamed)" } },
-                    placeholder = "None",
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-                Dropdown(
-                    label = "Preset",
-                    options = presets.map { it.name },
-                    selected = settings.chatPreset,
-                    onSelect = { p -> update { it.copy(chatPreset = p) } },
-                    display = { it },
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                    OutlinedButton(onClick = { nav.navigate(Routes.CHARACTERS) }) { Text("Edit characters") }
-                    OutlinedButton(onClick = { nav.navigate(Routes.PRESETS) }) { Text("Edit presets") }
-                }
-
-                SectionTitle("Roleplay")
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Text("Enable Roleplay", modifier = Modifier.weight(1f))
-                    Switch(checked = settings.roleplayEnabled, onCheckedChange = { on -> update { it.copy(roleplayEnabled = on) } })
-                }
-                if (settings.roleplayEnabled) {
-                    OutlinedTextField(
-                        value = promptSystem,
-                        onValueChange = { v -> promptSystem = v; update { it.copy(imagePromptSystem = v) } },
-                        label = { Text("Image prompt writer: system prompt") },
-                        minLines = 4,
-                        keyboardOptions = PrivateText,
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    )
-                    TextButton(onClick = {
-                        promptSystem = Settings.DEFAULT_IMAGE_PROMPT_SYSTEM
-                        update { it.copy(imagePromptSystem = Settings.DEFAULT_IMAGE_PROMPT_SYSTEM) }
-                    }) { Text("Reset to default") }
-                }
-            }
-        }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
+        Text("Enable Roleplay", modifier = Modifier.weight(1f))
+        Switch(checked = settings.roleplayEnabled, onCheckedChange = { on -> update { it.copy(roleplayEnabled = on) } })
     }
+    if (!settings.roleplayEnabled) return
+
+    SectionTitle("Image prompts")
+    OutlinedTextField(
+        value = promptSystem,
+        onValueChange = { v -> promptSystem = v; update { it.copy(imagePromptSystem = v) } },
+        label = { Text("Image prompt writer: system prompt") },
+        minLines = 4,
+        keyboardOptions = PrivateText,
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+    )
+    TextButton(onClick = {
+        promptSystem = Settings.DEFAULT_IMAGE_PROMPT_SYSTEM
+        update { it.copy(imagePromptSystem = Settings.DEFAULT_IMAGE_PROMPT_SYSTEM) }
+    }) { Text("Reset to default") }
+    TokenField("Image prompt limit (written or refined)", settings.imagePromptMaxTokens) { n ->
+        update { it.copy(imagePromptMaxTokens = n) }
+    }
+
+    SectionTitle("Generate limits")
+    Text(
+        "Most tokens the LLM may write for each Generate. A thinking model's reasoning counts too.",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    TokenField("My description", settings.myDescriptionMaxTokens) { n -> update { it.copy(myDescriptionMaxTokens = n) } }
+    TokenField("Summary / background", settings.summaryMaxTokens) { n -> update { it.copy(summaryMaxTokens = n) } }
+}
+
+/** A whole-number token limit; saved as you type when it's at least 1. */
+@Composable
+private fun TokenField(label: String, value: Int, onChange: (Int) -> Unit) {
+    var text by remember { mutableStateOf(value.toString()) }
+    OutlinedTextField(
+        value = text,
+        onValueChange = { v ->
+            text = v.filter { it.isDigit() }.take(6)
+            text.toIntOrNull()?.takeIf { it > 0 }?.let(onChange)
+        },
+        label = { Text(label) },
+        suffix = { Text("tokens") },
+        isError = (text.toIntOrNull() ?: 0) <= 0,
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+    )
 }
 
 private fun statusText(s: ServerStatus) = when (s) {

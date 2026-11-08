@@ -276,7 +276,7 @@ fun CharacterEditScreen(owner: String, routeId: String) {
             taskId = "gen:${c.id}:$field",
             request = {
                 val model = r?.model?.ifBlank { null } ?: app.engine.defaultModel()
-                Prompts.characterField(field, snapshot, r, model, hint)
+                Prompts.characterField(field, snapshot, r, model, hint, store.settings().characterFieldMaxTokens)
             },
             onText = { t ->
                 c = when (field) {

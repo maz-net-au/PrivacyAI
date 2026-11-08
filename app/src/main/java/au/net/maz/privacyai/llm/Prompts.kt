@@ -137,7 +137,7 @@ object Prompts {
      * Ask the LLM for an image prompt. Same contents as the old app: the story background,
      * every message, then the focus. Without a roleplay, just the focus.
      */
-    fun imagePrompt(rp: Roleplay?, focus: String, model: String, system: String, character: Character? = null): ChatRequest {
+    fun imagePrompt(rp: Roleplay?, focus: String, model: String, system: String, maxTokens: Int, character: Character? = null): ChatRequest {
         val user = buildString {
             if (character != null) {
                 appendLine("## The character"); appendLine(characterSheet(character)); appendLine()
@@ -152,11 +152,11 @@ object Prompts {
             appendLine("Focus for the image: ${focus.ifBlank { defaultFocus }}")
             append("Describe the single image now, leading with the focus above.")
         }
-        return fixed(model, system, user)
+        return fixed(model, system, user, maxTokens)
     }
 
     /** New: rewrite an existing prompt with a change request. */
-    fun refinePrompt(rp: Roleplay?, current: String, change: String, model: String, system: String, character: Character? = null): ChatRequest {
+    fun refinePrompt(rp: Roleplay?, current: String, change: String, model: String, system: String, maxTokens: Int, character: Character? = null): ChatRequest {
         val user = buildString {
             if (character != null) {
                 appendLine("## The character"); appendLine(characterSheet(character)); appendLine()
@@ -172,7 +172,7 @@ object Prompts {
             appendLine("Change requested: $change")
             append("Rewrite the whole image description with that change. Output only the description.")
         }
-        return fixed(model, system, user)
+        return fixed(model, system, user, maxTokens)
     }
 
     /** Every filled-in field of a character, for use as context. */
@@ -194,7 +194,7 @@ object Prompts {
      * value, steered by [hint] (no hint: a fresh version). "state" with no hint is the old
      * app's "Update with LLM".
      */
-    fun characterField(field: String, c: Character, rp: Roleplay?, model: String, hint: String): ChatRequest {
+    fun characterField(field: String, c: Character, rp: Roleplay?, model: String, hint: String, maxTokens: Int): ChatRequest {
         val user = rp?.let(::userName) ?: "the user"
         val current = when (field) {
             "name" -> c.name
@@ -247,12 +247,12 @@ object Prompts {
             model,
             "You help write characters for roleplays. Follow the request exactly and output only what is asked for, with no preamble.",
             userTurn,
-            maxTokens = 1200,
+            maxTokens = maxTokens,
         )
     }
 
     /** New: generate "my description" for the user in a roleplay. */
-    fun myDescription(rp: Roleplay, model: String, hint: String): ChatRequest {
+    fun myDescription(rp: Roleplay, model: String, hint: String, maxTokens: Int): ChatRequest {
         val user = userName(rp)
         val current = rp.myDescription.trim()
         val thing = "short description of $user, the user's character in this roleplay (appearance, personality and role)"
@@ -263,11 +263,11 @@ object Prompts {
             append(guidedAsk(thing, current, hint, "Write a new version of the $thing."))
             append(" Output only the description.")
         }
-        return fixed(model, "You help write roleplays. Output only what is asked for.", turn, maxTokens = 600)
+        return fixed(model, "You help write roleplays. Output only what is asked for.", turn, maxTokens = maxTokens)
     }
 
     /** Summary / background, generated from the conversation (old app's summarise step). */
-    fun summary(rp: Roleplay, model: String, hint: String): ChatRequest {
+    fun summary(rp: Roleplay, model: String, hint: String, maxTokens: Int): ChatRequest {
         val current = rp.summaryBackground.trim()
         val thing = "concise summary of the story so far (key events, where things stand now, and anything that must be remembered)"
         val turn = buildString {
@@ -277,7 +277,7 @@ object Prompts {
             append(guidedAsk(thing, current, hint, "Rewrite the summary so it is up to date with the conversation, keeping what still matters."))
             append(" Output only the summary.")
         }
-        return fixed(model, "You summarise roleplay stories accurately and concisely.", turn, maxTokens = 1200)
+        return fixed(model, "You summarise roleplay stories accurately and concisely.", turn, maxTokens = maxTokens)
     }
 
     /**

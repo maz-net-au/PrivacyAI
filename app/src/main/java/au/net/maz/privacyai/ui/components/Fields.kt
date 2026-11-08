@@ -52,6 +52,8 @@ fun GenerateField(
     generateLabel: String = "Generate",
     error: String? = null,
     guidanceInDialog: Boolean = false,
+    /** False: just the Generate button, with no guidance at all. */
+    showGuidance: Boolean = true,
 ) {
     var hint by remember { mutableStateOf("") }
     var showHint by remember { mutableStateOf(false) }
@@ -99,7 +101,9 @@ fun GenerateField(
                     Spacer(Modifier.width(8.dp))
                     TextButton(onClick = onStop) { Text("Stop") }
                 } else {
-                    if (guidanceInDialog) {
+                    if (!showGuidance) {
+                        TextButton(onClick = { onGenerate("") }) { Text(generateLabel) }
+                    } else if (guidanceInDialog) {
                         TextButton(onClick = { dialog = true }) { Text(generateLabel) }
                     } else {
                         TextButton(onClick = { showHint = !showHint }) { Text(if (showHint) "Hide guidance" else "Guidance") }

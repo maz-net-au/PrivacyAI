@@ -72,13 +72,13 @@ fun FocusScreen(owner: String, resultKey: String, ctx: String) {
     val writeTask = "focus:$resultKey:write"
     val refineTask = "focus:$resultKey:refine"
 
-    fun run(task: String, build: suspend (String, String) -> au.net.maz.privacyai.net.ChatRequest) {
+    fun run(task: String, build: suspend (String, au.net.maz.privacyai.data.model.Settings) -> au.net.maz.privacyai.net.ChatRequest) {
         error = null
         app.engine.complete(
             taskId = task,
             request = {
                 val m = model ?: app.engine.defaultModel()
-                build(m, store.settings().imagePromptSystem)
+                build(m, store.settings())
             },
             onText = { prompt = it },
             onDone = { e -> if (e != null && e !is CancellationException) error = e.message },
@@ -107,10 +107,11 @@ fun FocusScreen(owner: String, resultKey: String, ctx: String) {
                         val r = contextRp
                         val ch = character
                         val f = focus
-                        run(writeTask) { m, system -> Prompts.imagePrompt(r, f, m, system, ch) }
+                        run(writeTask) { m, s -> Prompts.imagePrompt(r, f, m, s.imagePromptSystem, s.imagePromptMaxTokens, ch) }
                     },
                     onStop = { app.tasks.cancel(writeTask) },
                     generateLabel = "Write prompt",
+                    showGuidance = false,
                 )
                 GenerateField(
                     label = "Prompt", value = prompt, onValueChange = { prompt = it }, minLines = 6,
@@ -125,10 +126,11 @@ fun FocusScreen(owner: String, resultKey: String, ctx: String) {
                         val chr = character
                         val cur = prompt
                         val ch = change
-                        run(refineTask) { m, system -> Prompts.refinePrompt(r, cur, ch, m, system, chr) }
+                        run(refineTask) { m, s -> Prompts.refinePrompt(r, cur, ch, m, s.imagePromptSystem, s.imagePromptMaxTokens, chr) }
                     },
                     onStop = { app.tasks.cancel(refineTask) },
                     generateLabel = "Refine",
+                    showGuidance = false,
                 )
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 Button(

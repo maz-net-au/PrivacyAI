@@ -26,6 +26,14 @@ data class Settings(
     val roleplayEnabled: Boolean = false,
     /** Roleplay section: the "visual director" system prompt used to write image prompts. */
     val imagePromptSystem: String = DEFAULT_IMAGE_PROMPT_SYSTEM,
+    /**
+     * Most tokens the LLM may write for each Generate (on llama-server a thinking model's
+     * reasoning counts towards these too).
+     */
+    val imagePromptMaxTokens: Int = 2000,
+    val characterFieldMaxTokens: Int = 1200,
+    val myDescriptionMaxTokens: Int = 1200,
+    val summaryMaxTokens: Int = 5000,
 ) {
     companion object {
         /** Taken from the old app (SceneImageConfig.SYSTEM_PROMPT). */

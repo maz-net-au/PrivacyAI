@@ -240,7 +240,9 @@ fun RoleplaySetupScreen(routeId: String) {
             taskId = "gen:$id:$field",
             request = {
                 val use = m ?: app.engine.defaultModel()
-                if (field == "summary") Prompts.summary(snapshot, use, hint) else Prompts.myDescription(snapshot, use, hint)
+                val s = store.settings()
+                if (field == "summary") Prompts.summary(snapshot, use, hint, s.summaryMaxTokens)
+                else Prompts.myDescription(snapshot, use, hint, s.myDescriptionMaxTokens)
             },
             onText = { t -> if (field == "summary") summary = t else myDescription = t },
             onDone = { e -> if (e != null && e !is kotlinx.coroutines.CancellationException) genError = field to (e.message ?: "Generate failed") },

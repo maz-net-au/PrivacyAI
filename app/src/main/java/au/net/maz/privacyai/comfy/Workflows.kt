@@ -22,6 +22,8 @@ data class Workflow(
     val name: String,
     val section: MediaKind,
     val sortOrder: Int,
+    /** The config's description, shown under the name in the list. */
+    val description: String = "",
 )
 
 /** A workflow loaded for use: its config and graph. */
@@ -157,7 +159,10 @@ class Workflows(private val context: Context, private val store: Store) {
         return out.toString(Charsets.UTF_8.name())
     }
 
-    private fun WorkflowEntity.toWorkflow() = Workflow(id, name, MediaKind.fromKey(section), sortOrder)
+    private fun WorkflowEntity.toWorkflow() = Workflow(
+        id, name, MediaKind.fromKey(section), sortOrder,
+        description = runCatching { json.decodeFromString<WorkflowConfig>(configJson).description }.getOrNull().orEmpty(),
+    )
 
     private companion object {
         const val GRAPH_ENTRY = "api_workflow.json"

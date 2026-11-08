@@ -1,5 +1,10 @@
 package au.net.maz.privacyai.ui.generate
 
+import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.ui.graphics.vector.ImageVector
+import au.net.maz.privacyai.ui.components.IconRow
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -109,19 +114,16 @@ fun SectionScreen(section: MediaKind, owner: String, resultKey: String) {
                                 if (name.isNotBlank()) scope.launch { workflows?.rename(w.id, name) }
                             }) { Text("Save") }
                         }
-                    } else Row(
-                        Modifier.fillMaxWidth()
-                            .combinedClickable(
-                                enabled = !reorder,
-                                onClick = {
-                                    nav.navigate(Routes.form(w.id, owner, result = resultKey, popTo = if (returnToCaller) "section" else ""))
-                                },
-                                onLongClick = { menu = true },
-                            )
-                            .padding(horizontal = 16.dp, vertical = 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                    } else IconRow(
+                        icon = sectionIcon(section),
+                        title = w.name,
+                        subtitle = w.description,
+                        enabled = !reorder,
+                        onClick = {
+                            nav.navigate(Routes.form(w.id, owner, result = resultKey, popTo = if (returnToCaller) "section" else ""))
+                        },
+                        onLongClick = { menu = true },
                     ) {
-                        Text(w.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                         if (reorder) {
                             IconButton(enabled = index > 0, onClick = {
                                 val ids = list.map { it.id }.toMutableList().apply { add(index - 1, removeAt(index)) }
@@ -142,4 +144,11 @@ fun SectionScreen(section: MediaKind, owner: String, resultKey: String) {
             }
         }
     }
+}
+
+/** The same icons as the home screen's Generate rows. */
+private fun sectionIcon(section: MediaKind): ImageVector = when (section) {
+    MediaKind.IMAGE -> Icons.Filled.Image
+    MediaKind.AUDIO -> Icons.Filled.AudioFile
+    MediaKind.VIDEO -> Icons.Filled.Movie
 }

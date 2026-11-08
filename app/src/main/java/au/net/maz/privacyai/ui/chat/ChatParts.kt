@@ -1,5 +1,7 @@
 package au.net.maz.privacyai.ui.chat
 
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.BoxWithConstraints
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -146,19 +148,30 @@ fun MessageBubble(
     versionIndex: Int = 0,
     versionCount: Int = 1,
     onVersion: (Int) -> Unit = {},
+    /**
+     * Roleplay layout: others' messages are always 90% of the screen width (left), and
+     * the user's are at most 90% (right). Otherwise bubbles fit their text, up to 560 dp.
+     */
+    roleplayWidths: Boolean = false,
 ) {
     val store = LocalStore.current
     var menu by remember { mutableStateOf(false) }
     var showThink by remember { mutableStateOf(false) }
     val (think, answer) = remember(text) { splitThink(text) }
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+    val ninety = maxWidth * 0.9f
+    val bubbleWidth = when {
+        !roleplayWidths -> Modifier.widthIn(max = 560.dp)
+        isUser -> Modifier.widthIn(max = ninety)
+        else -> Modifier.width(ninety)
+    }
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
     ) {
         Box {
             Column(
-                Modifier
-                    .widthIn(max = 560.dp)
+                bubbleWidth
                     .clip(RoundedCornerShape(16.dp))
                     .background(background)
                     .combinedClickable(onClick = {}, onLongClick = { if (actions.isNotEmpty()) menu = true })
@@ -205,6 +218,7 @@ fun MessageBubble(
                 actions.forEach { a -> DropdownMenuItem(text = { Text(a.label) }, onClick = { menu = false; a.onClick() }) }
             }
         }
+    }
     }
 }
 

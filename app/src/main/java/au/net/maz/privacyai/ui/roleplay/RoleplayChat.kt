@@ -1,5 +1,12 @@
 package au.net.maz.privacyai.ui.roleplay
 
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.combinedClickable
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -66,6 +73,7 @@ import kotlinx.coroutines.launch
  * A roleplay's conversation. Everything about the roleplay is reached from here: the
  * hamburger menu (details, its gallery, export, delete) or the conversation itself.
  */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun RoleplayChatScreen(id: String) {
     val app = LocalApp.current
@@ -145,6 +153,7 @@ fun RoleplayChatScreen(id: String) {
                     val isLast = m.id == messages.lastOrNull()?.id
                     val colours = ch?.let { bubbleColours(it.colour) }
                     MessageBubble(
+                        roleplayWidths = true,
                         versionIndex = m.active,
                         versionCount = m.versions.size,
                         onVersion = { i ->
@@ -228,15 +237,29 @@ fun RoleplayChatScreen(id: String) {
                                 CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
                             }
                         } else if (!busy) {
-                            IconButton(onClick = {
-                                app.engine.impersonate(
-                                    id, input,
-                                    onText = { input = it },
-                                    onDone = { e ->
-                                        if (e != null && e !is CancellationException) scope.launch { snackbar.showSnackbar(e.message ?: "Impersonate failed") }
+                            fun impersonate(ignoreEos: Boolean) = app.engine.impersonate(
+                                id, input,
+                                onText = { input = it },
+                                onDone = { e ->
+                                    if (e != null && e !is CancellationException) scope.launch { snackbar.showSnackbar(e.message ?: "Impersonate failed") }
+                                },
+                                ignoreEos = ignoreEos,
+                            )
+                            // Tap: write my reply (or carry on from what's typed).
+                            // Long-press: the same, but the model can't end the turn itself;
+                            // it runs until a name prefix or the length cap.
+                            val haptics = LocalHapticFeedback.current
+                            Box(
+                                Modifier.size(48.dp).clip(CircleShape).combinedClickable(
+                                    onClick = { impersonate(false) },
+                                    onLongClick = {
+                                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        impersonate(true)
                                     },
-                                )
-                            }) { Icon(Icons.Filled.RecordVoiceOver, "Impersonate (write my reply)") }
+                                    onLongClickLabel = "Impersonate without stopping early",
+                                ),
+                                contentAlignment = Alignment.Center,
+                            ) { Icon(Icons.Filled.RecordVoiceOver, "Impersonate (write my reply)") }
                         }
                     },
                     extra = {

@@ -220,18 +220,51 @@ class ChatEngine(private val app: PrivacyApp) {
      * whatever is already typed; the model continues that. The result goes into the input
      * box for the user to edit and send.
      */
-    fun impersonate(rpId: String, prefill: String, onText: (String) -> Unit, onDone: (Throwable?) -> Unit): Job =
-        complete(
+    fun impersonate(
+        rpId: String,
+        prefill: String,
+        onText: (String) -> Unit,
+        onDone: (Throwable?) -> Unit,
+        ignoreEos: Boolean = false,
+    ): Job {
+        val head = prefill.trimEnd()
+        var user: String? = null // set when the request is built, before any text arrives
+        return complete(
             taskId = "impersonate:$rpId",
-            request = { impersonateRequest(rpId, prefill) },
+            request = {
+                user = store.roleplay(rpId)?.let(Prompts::userName)
+                impersonateRequest(rpId, head, ignoreEos)
+            },
             onText = { t ->
-                val cont = t.trimStart()
-                onText(if (prefill.isBlank()) cont else prefill.trimEnd() + (if (cont.isEmpty()) "" else " ") + cont)
+                // Newer llama-server sends the whole prefilled message back first (the last
+                // character message + "\n<you>:"), older ones only the continuation. Keep
+                // what comes after the last "<you>:" either way (as the old app did).
+                val body = user?.let { t.substringAfterLast("$it:") } ?: t
+                onText(foldOntoPrefill(head, body))
             },
             onDone = onDone,
         )
+    }
 
-    private suspend fun impersonateRequest(rpId: String, prefill: String): ChatRequest {
+    /**
+     * Join the typed text ([head]) and the model's [body]. Servers that echo the prefill
+     * already include [head] in [body]; others return only the rest. (From the old app.)
+     */
+    private fun foldOntoPrefill(head: String, body: String): String {
+        val shown = body.trimStart()
+        return when {
+            head.isEmpty() -> shown
+            shown.startsWith(head) -> shown // the echo arrived
+            head.startsWith(shown) -> head // still echoing our own text back
+            else -> head + body
+        }.trim()
+    }
+
+    /**
+     * [ignoreEos] (long-press): the model's end-of-turn token is ignored, so it keeps writing
+     * until a name prefix or the [CONTINUE_TOKENS] cap stops it.
+     */
+    private suspend fun impersonateRequest(rpId: String, prefill: String, ignoreEos: Boolean): ChatRequest {
         val rp = store.roleplay(rpId) ?: error("Roleplay not found")
         val model = rp.model.ifBlank { defaultModel() }
         val user = Prompts.userName(rp)
@@ -250,7 +283,7 @@ class ChatEngine(private val app: PrivacyApp) {
         else apiText("assistant", "$user:$typed")
         val messages = listOf(apiText("system", Prompts.roleplaySystem(rp))) + history
         return Prompts.request(model, messages, preset, stop = rp.characters.map { "${it.name}:" } + "\n$user:")
-            .copy(maxTokens = CONTINUE_TOKENS)
+            .copy(maxTokens = CONTINUE_TOKENS, ignoreEos = ignoreEos)
     }
 
     /** Context usage after a reply; the context size is looked up once per model. */

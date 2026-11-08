@@ -231,6 +231,10 @@ fun MessageBubble(
                 // *Italics* (e.g. roleplay actions) in the message's accent colour: the
                 // character's own colour, readable on its bubble, and unlike the body text.
                 if (answer.isNotBlank()) MarkdownText(answer, color = textColour, italicColor = nameColour)
+                // An empty send (asking for another reply) still shows as your turn.
+                if (isUser && answer.isBlank() && attachments.isEmpty() && !pending) {
+                    Text("(no message)", fontSize = 13.sp, fontStyle = FontStyle.Italic, color = textColour.copy(alpha = 0.6f))
+                }
                 if (pending && answer.isBlank()) CircularProgressIndicator(Modifier.size(18.dp).padding(2.dp), strokeWidth = 2.dp)
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
                 if (versionCount > 1) {

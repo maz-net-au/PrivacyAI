@@ -133,13 +133,13 @@ class ChatEngine(private val app: PrivacyApp) {
     /** Send the user's message (if any) and have a character reply. */
     fun sendRoleplay(rpId: String, text: String, attachments: List<Attachment>, speakerId: String?) {
         app.tasks.launch(replyTaskId(rpId)) {
-            if (text.isNotBlank() || attachments.isNotEmpty()) {
-                store.updateRoleplay(rpId) { r ->
-                    r.copy(
-                        updatedAt = System.currentTimeMillis(),
-                        messages = r.messages + Message(speaker = Message.USER, text = text, attachments = attachments),
-                    )
-                }
+            // Always add your turn, even when empty (as the old app did): an empty send
+            // asks for another reply, and the server won't take two character turns in a row.
+            store.updateRoleplay(rpId) { r ->
+                r.copy(
+                    updatedAt = System.currentTimeMillis(),
+                    messages = r.messages + Message(speaker = Message.USER, text = text.trim(), attachments = attachments),
+                )
             }
             replyRoleplay(rpId, Mode.NEW, null, speakerId)
         }
@@ -383,7 +383,9 @@ class ChatEngine(private val app: PrivacyApp) {
         val vision = ModelCapabilities.supportsImages(model)
         val withImages = messages.filter { it.attachments.isNotEmpty() && !it.pending }
         val sendImages = (if (limit <= 0) withImages else withImages.takeLast(limit)).map { it.id }.toSet()
-        return messages.filter { !it.pending && (it.text.isNotBlank() || it.attachments.isNotEmpty()) }.map { m ->
+        // Your empty turns are kept (they're how you ask for another reply); empty
+        // character messages are dropped.
+        return messages.filter { !it.pending && (it.isUser || it.text.isNotBlank() || it.attachments.isNotEmpty()) }.map { m ->
             val body = text(m)
             if (m.attachments.isEmpty()) return@map apiText(role(m), body)
             if (vision && m.id in sendImages) {

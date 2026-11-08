@@ -1,5 +1,12 @@
 package au.net.maz.privacyai.ui.roleplay
 
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.border
 import au.net.maz.privacyai.ui.chat.FollowNewest
 import androidx.compose.material.icons.filled.ImageSearch
 import androidx.compose.material.icons.filled.Delete
@@ -159,6 +166,21 @@ fun RoleplayChatScreen(id: String) {
                     val ch = rp.character(m.speaker)
                     val isLast = m.id == messages.lastOrNull()?.id
                     val colours = ch?.let { bubbleColours(it.colour) }
+                    if (editing == m.id) {
+                        EditInPlace(
+                            text = editText,
+                            onText = { editText = it },
+                            background = colours?.background ?: MaterialTheme.colorScheme.primaryContainer,
+                            textColour = colours?.text ?: MaterialTheme.colorScheme.onPrimaryContainer,
+                            onCancel = { editing = null },
+                            onSave = {
+                                val t = editText
+                                scope.launch { store.updateRoleplay(id) { r -> r.copy(messages = r.messages.map { if (it.id == m.id) it.withText(t) else it }) } }
+                                editing = null
+                            },
+                        )
+                        return@items
+                    }
                     MessageBubble(
                         roleplayWidths = true,
                         versionIndex = m.active,
@@ -214,23 +236,8 @@ fun RoleplayChatScreen(id: String) {
                     )
                 }
             }
-            val editingId = editing
-            if (editingId != null) {
-                Surface(tonalElevation = 3.dp) {
-                    Column(Modifier.fillMaxWidth().padding(8.dp)) {
-                        OutlinedTextField(editText, { editText = it }, label = { Text("Edit message") }, maxLines = 8,
-                            keyboardOptions = PrivateText, modifier = Modifier.fillMaxWidth())
-                        Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
-                            TextButton(onClick = { editing = null }) { Text("Cancel") }
-                            Button(onClick = {
-                                val t = editText
-                                scope.launch { store.updateRoleplay(id) { r -> r.copy(messages = r.messages.map { if (it.id == editingId) it.withText(t) else it }) } }
-                                editing = null
-                            }) { Text("Save") }
-                        }
-                    }
-                }
-            } else {
+            // While a message is being edited (in place, above), the input is hidden for room.
+            if (editing == null) {
                 ChatInput(
                     text = input,
                     onText = { input = it },
@@ -340,6 +347,47 @@ private fun describeInto(
                     }
                 },
             )
+        }
+    }
+}
+
+/**
+ * Editing a message in place: its bubble becomes a full-width editor that grows with the
+ * text (like the old app), with Cancel / Save under it.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun EditInPlace(
+    text: String,
+    onText: (String) -> Unit,
+    background: Color,
+    textColour: Color,
+    onCancel: () -> Unit,
+    onSave: () -> Unit,
+) {
+    val bring = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus(); bring.bringIntoView() }
+    Column(
+        Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(16.dp)).background(background)
+            .border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(16.dp))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+    ) {
+        androidx.compose.foundation.text.BasicTextField(
+            value = text,
+            onValueChange = onText,
+            textStyle = MaterialTheme.typography.bodyLarge.copy(color = textColour),
+            cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+            keyboardOptions = PrivateText,
+            modifier = Modifier.fillMaxWidth().heightIn(min = 80.dp).focusRequester(focus),
+        )
+        Row(
+            horizontalArrangement = Arrangement.End,
+            modifier = Modifier.fillMaxWidth().bringIntoViewRequester(bring),
+        ) {
+            TextButton(onClick = onCancel) { Text("Cancel") }
+            TextButton(onClick = onSave) { Text("Save") }
         }
     }
 }

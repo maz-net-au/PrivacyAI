@@ -4,6 +4,7 @@ import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.boolean
@@ -12,6 +13,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 import okhttp3.MediaType
 import okhttp3.MediaType.Companion.toMediaType
@@ -113,19 +115,43 @@ class ComfyClient {
             }
         }
 
+    /**
+     * Execution time from the history's status messages: a list of `[event, {timestamp}]`
+     * where timestamps are server milliseconds. From `execution_start` to whichever of
+     * success / error / interrupted came last. Null if they're missing.
+     */
+    private fun executionMs(status: JsonObject?): Long? = runCatching {
+        val messages = status?.get("messages") as? JsonArray ?: return null
+        var start: Long? = null
+        var end: Long? = null
+        for (m in messages) {
+            val pair = m as? JsonArray ?: continue
+            val event = pair.getOrNull(0)?.jsonPrimitive?.contentOrNull ?: continue
+            val ts = (pair.getOrNull(1) as? JsonObject)?.get("timestamp")?.jsonPrimitive?.longOrNull ?: continue
+            when (event) {
+                "execution_start" -> start = ts
+                "execution_success", "execution_error", "execution_interrupted" -> end = ts
+            }
+        }
+        val s = start ?: return null
+        val e = end ?: return null
+        (e - s).takeIf { it >= 0 }
+    }.getOrNull()
+
     private fun parseHistory(root: JsonObject, promptId: String): ComfyHistoryResult {
         val entry = root[promptId] as? JsonObject ?: return ComfyHistoryResult.Pending
         val status = entry["status"] as? JsonObject
         val statusStr = status?.get("status_str")?.jsonPrimitive?.contentOrNull
         val completed = runCatching { status?.get("completed")?.jsonPrimitive?.boolean }.getOrNull()
         val outputs = entry["outputs"] as? JsonObject
+        val duration = executionMs(status)
         return when {
             statusStr == "error" -> {
                 val detail = status?.get("messages")?.toString()?.take(500)
-                ComfyHistoryResult.Error("ComfyUI execution failed${detail?.let { ": $it" } ?: ""}")
+                ComfyHistoryResult.Error("ComfyUI execution failed${detail?.let { ": $it" } ?: ""}", duration)
             }
             completed == true || (status == null && outputs != null) ->
-                ComfyHistoryResult.Completed(outputs ?: JsonObject(emptyMap()))
+                ComfyHistoryResult.Completed(outputs ?: JsonObject(emptyMap()), duration)
             else -> ComfyHistoryResult.Pending
         }
     }

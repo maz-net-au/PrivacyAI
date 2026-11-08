@@ -45,6 +45,8 @@ data class GenJob(
     val emptySlots: List<String> = emptyList(),
     val promptId: String? = null,
     val running: Boolean = false,
+    /** When the app first saw it running (fallback timing if the server doesn't report it). */
+    val startedAt: Long? = null,
 )
 
 /**
@@ -115,7 +117,7 @@ class ComfyRunner(
             when (pid) {
                 in queue.runningIds -> {
                     misses.remove(job.id)
-                    if (!job.running) save(job.copy(running = true))
+                    if (!job.running) save(job.copy(running = true, startedAt = System.currentTimeMillis()))
                 }
                 in queue.pendingIds -> misses.remove(job.id)
                 else -> checkHistory(job, pid, address)
@@ -152,9 +154,9 @@ class ComfyRunner(
         when (val h = client.history(address, promptId).getOrNull() ?: return) {
             is ComfyHistoryResult.Completed -> {
                 misses.remove(job.id)
-                download(job, h.outputs, address)
+                download(job, h.outputs, address, h.durationMs ?: fallbackMs(job))
             }
-            is ComfyHistoryResult.Error -> fail(job, h.message)
+            is ComfyHistoryResult.Error -> fail(job, h.message, h.durationMs ?: fallbackMs(job))
             ComfyHistoryResult.Pending -> {
                 val n = (misses[job.id] ?: 0) + 1
                 misses[job.id] = n
@@ -164,7 +166,10 @@ class ComfyRunner(
     }
 
     /** First output fills the placeholder; any extra outputs become new items beside it. */
-    private suspend fun download(job: GenJob, outputs: JsonObject, address: String) {
+    /** Time since the app first saw the job running; accurate to the poll interval. */
+    private fun fallbackMs(job: GenJob): Long? = job.startedAt?.let { System.currentTimeMillis() - it }
+
+    private suspend fun download(job: GenJob, outputs: JsonObject, address: String, durationMs: Long?) {
         val refs = (outputs[job.outputNodeId]?.jsonObject?.get(job.outputField) as? JsonArray)
             ?.mapNotNull { el ->
                 val o = el.jsonObject
@@ -195,6 +200,7 @@ class ComfyRunner(
             val mime = mimeFor(ref.filename)
             val done = placeholder.copy(
                 fileId = fileId, mime = mime, kind = MediaKind.fromMime(mime), status = MediaStatus.DONE,
+                info = placeholder.info.copy(generationMs = durationMs),
             )
             if (i == 0) {
                 // Still there? (It may have been deleted while downloading.)
@@ -224,10 +230,10 @@ class ComfyRunner(
         fail(job, "Cancelled")
     }
 
-    private suspend fun fail(job: GenJob, message: String) {
+    private suspend fun fail(job: GenJob, message: String, durationMs: Long? = null) {
         runCatching {
             store.updateMedia(job.mediaId) { m: Media ->
-                m.copy(status = MediaStatus.FAILED, info = m.info.copy(error = message.take(500)))
+                m.copy(status = MediaStatus.FAILED, info = m.info.copy(error = message.take(500), generationMs = durationMs))
             }
         }
         finish(job.id)

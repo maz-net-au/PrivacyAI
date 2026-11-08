@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Pause
@@ -93,7 +95,8 @@ fun MediaFull(media: Media, modifier: Modifier = Modifier) {
 
 /**
  * Plays an encrypted video or audio file. MediaPlayer reads decrypted bytes on demand,
- * so no plaintext copy is written anywhere.
+ * so no plaintext copy is written anywhere. Everything opens paused; videos also open
+ * muted, with an unmute button.
  */
 @Composable
 fun EncryptedPlayer(fileId: String, video: Boolean, modifier: Modifier = Modifier) {
@@ -104,6 +107,7 @@ fun EncryptedPlayer(fileId: String, video: Boolean, modifier: Modifier = Modifie
     var position by remember { mutableFloatStateOf(0f) }
     var aspect by remember { mutableFloatStateOf(16f / 9f) }
     var error by remember { mutableStateOf<String?>(null) }
+    var muted by remember { mutableStateOf(video) }
 
     DisposableEffect(fileId) {
         runCatching {
@@ -112,7 +116,9 @@ fun EncryptedPlayer(fileId: String, video: Boolean, modifier: Modifier = Modifie
             player.setOnPreparedListener {
                 prepared = true
                 if (it.videoWidth > 0 && it.videoHeight > 0) aspect = it.videoWidth.toFloat() / it.videoHeight
-                it.start(); playing = true
+                if (muted) it.setVolume(0f, 0f)
+                // Start paused. For videos, seeking shows the first frame instead of a black box.
+                if (video) it.seekTo(0)
             }
             player.setOnCompletionListener { playing = false }
             player.setOnErrorListener { _, what, _ -> error = "Can't play this file ($what)"; true }
@@ -137,7 +143,10 @@ fun EncryptedPlayer(fileId: String, video: Boolean, modifier: Modifier = Modifie
                     TextureView(ctx).apply {
                         surfaceTextureListener = object : TextureView.SurfaceTextureListener {
                             override fun onSurfaceTextureAvailable(st: SurfaceTexture, w: Int, h: Int) {
-                                runCatching { player.setSurface(Surface(st)) }
+                                runCatching {
+                                    player.setSurface(Surface(st))
+                                    if (prepared && !player.isPlaying) player.seekTo(player.currentPosition)
+                                }
                             }
                             override fun onSurfaceTextureSizeChanged(st: SurfaceTexture, w: Int, h: Int) {}
                             override fun onSurfaceTextureDestroyed(st: SurfaceTexture): Boolean {
@@ -171,6 +180,17 @@ fun EncryptedPlayer(fileId: String, video: Boolean, modifier: Modifier = Modifie
                 },
                 modifier = Modifier.weight(1f),
             )
+            if (video) {
+                IconButton(enabled = prepared, onClick = {
+                    muted = !muted
+                    runCatching { if (muted) player.setVolume(0f, 0f) else player.setVolume(1f, 1f) }
+                }) {
+                    Icon(
+                        if (muted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                        if (muted) "Unmute" else "Mute",
+                    )
+                }
+            }
         }
     }
 }

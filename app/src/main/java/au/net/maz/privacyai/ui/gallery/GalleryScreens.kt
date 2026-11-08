@@ -2,8 +2,18 @@ package au.net.maz.privacyai.ui.gallery
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Movie
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -14,15 +24,15 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHostState
@@ -63,14 +73,16 @@ import kotlinx.coroutines.withContext
  * A grid of media: the main Gallery, a roleplay's own gallery, or (with [resultKey]) a
  * picker that returns the chosen item. Newest first; in-progress items show a placeholder.
  */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MediaGridScreen(owner: String, resultKey: String) {
     val app = LocalApp.current
     val store = LocalStore.current
     val nav = LocalNav.current
+    val scope = rememberCoroutineScope()
     val picking = resultKey.isNotBlank()
     val items by store.observeMedia(owner).collectAsState(initial = emptyList())
-    var filter by kept<MediaKind?>("filter") { null }
+    var tab by kept("tab") { 0 }
     val photos = rememberPhotoSources(owner, allowVideo = !picking) { m ->
         if (picking) { app.results.put(resultKey, m.id); nav.popBackStack() }
     }
@@ -78,9 +90,6 @@ fun MediaGridScreen(owner: String, resultKey: String) {
         picking -> "Choose"
         owner == MediaOwner.GALLERY -> "Gallery"
         else -> "Roleplay gallery"
-    }
-    val shown = items.filter { m ->
-        (filter == null || m.kind == filter) && (!picking || (m.status == MediaStatus.DONE && m.kind == MediaKind.IMAGE))
     }
     AppScaffold(
         title = title,
@@ -90,31 +99,69 @@ fun MediaGridScreen(owner: String, resultKey: String) {
             MenuItem("Take photo") { photos.takePhoto() },
         ),
     ) { pad ->
+        val open: (Media) -> Unit = { m ->
+            if (picking) { app.results.put(resultKey, m.id); nav.popBackStack() }
+            else nav.navigate(Routes.viewer(m.id))
+        }
+        if (picking) {
+            // Picking a reference image: images only, no tabs.
+            MediaGrid(
+                items.filter { it.status == MediaStatus.DONE && it.kind == MediaKind.IMAGE },
+                "No images here yet. Use the menu to add one from the device.",
+                open,
+                Modifier.padding(pad),
+            )
+            return@AppScaffold
+        }
+        val pager = rememberPagerState(initialPage = tab) { GalleryTab.entries.size }
+        LaunchedEffect(pager.currentPage) { tab = pager.currentPage }
         Column(Modifier.padding(pad).fillMaxSize()) {
-            if (!picking) {
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), contentPadding = PaddingValues(horizontal = 12.dp)) {
-                    item { FilterChip(filter == null, { filter = null }, { Text("All") }) }
-                    items(MediaKind.entries) { k -> FilterChip(filter == k, { filter = k }, { Text(k.label) }) }
+            TabRow(selectedTabIndex = pager.currentPage) {
+                GalleryTab.entries.forEachIndexed { i, t ->
+                    Tab(
+                        selected = pager.currentPage == i,
+                        onClick = { scope.launch { pager.animateScrollToPage(i) } },
+                        text = { Text(t.label) },
+                        icon = { Icon(t.icon, null) },
+                    )
                 }
             }
-            if (shown.isEmpty()) {
-                Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                    Text(if (picking) "No images here yet. Use the menu to add one from the device." else "Nothing here yet.")
-                }
+            HorizontalPager(pager, Modifier.fillMaxSize(), key = { it }) { page ->
+                val kind = GalleryTab.entries[page].kind
+                MediaGrid(
+                    if (kind == null) items else items.filter { it.kind == kind },
+                    "Nothing here yet.",
+                    open,
+                )
             }
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(110.dp),
-                contentPadding = PaddingValues(8.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                items(shown, key = { it.id }) { m ->
-                    MediaThumb(m, Modifier.clip(RoundedCornerShape(8.dp)).clickable {
-                        if (picking) { app.results.put(resultKey, m.id); nav.popBackStack() }
-                        else nav.navigate(Routes.viewer(m.id))
-                    })
-                }
-            }
+        }
+    }
+}
+
+/** The Gallery's tabs. */
+private enum class GalleryTab(val label: String, val icon: ImageVector, val kind: MediaKind?) {
+    ALL("All", Icons.Filled.PhotoLibrary, null),
+    IMAGES("Images", Icons.Filled.Image, MediaKind.IMAGE),
+    AUDIO("Audio", Icons.Filled.AudioFile, MediaKind.AUDIO),
+    VIDEO("Video", Icons.Filled.Movie, MediaKind.VIDEO),
+}
+
+/** A grid of thumbnails, newest first, or [empty] if there are none. */
+@Composable
+private fun MediaGrid(shown: List<Media>, empty: String, onOpen: (Media) -> Unit, modifier: Modifier = Modifier) {
+    if (shown.isEmpty()) {
+        Box(modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) { Text(empty) }
+        return
+    }
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(110.dp),
+        contentPadding = PaddingValues(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = modifier.fillMaxSize(),
+    ) {
+        items(shown, key = { it.id }) { m ->
+            MediaThumb(m, Modifier.clip(RoundedCornerShape(8.dp)).clickable { onOpen(m) })
         }
     }
 }
@@ -190,6 +237,10 @@ private fun Details(m: Media, actions: @Composable () -> Unit) {
     actions()
     m.info.error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 8.dp)) }
     if (m.status == MediaStatus.PENDING) Text("Generating...", style = MaterialTheme.typography.bodyMedium)
+    m.info.generationMs?.let { ms ->
+        val label = if (m.status == MediaStatus.FAILED) "Failed after" else "Generation time"
+        Text("$label: ${formatDuration(ms)}", style = MaterialTheme.typography.bodyMedium)
+    }
     if (m.info.description.isNotBlank()) {
         Text("Prompt / description", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
         Text(m.info.description, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.clickable { copyText(context, m.info.description) })
@@ -202,5 +253,16 @@ private fun Details(m: Media, actions: @Composable () -> Unit) {
     }
     if (m.info.files.isNotEmpty()) {
         Text("Input images: ${m.info.files.size}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))
+    }
+}
+
+/** e.g. "850 ms", "42.3 s", "1 m 23 s", "1 h 2 m". */
+internal fun formatDuration(ms: Long): String {
+    val s = ms / 1000
+    return when {
+        ms < 1000 -> "$ms ms"
+        s < 60 -> "%.1f s".format(ms / 1000.0)
+        s < 3600 -> "${s / 60} m ${s % 60} s"
+        else -> "${s / 3600} h ${(s % 3600) / 60} m"
     }
 }

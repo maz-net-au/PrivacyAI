@@ -60,8 +60,11 @@ sealed class ComfyHistoryResult {
     /** Prompt unknown to /history — still queued/running, or lost to a restart. */
     data object Pending : ComfyHistoryResult()
 
-    /** Finished; [outputs] is the raw per-node outputs object. */
-    data class Completed(val outputs: JsonObject) : ComfyHistoryResult()
+    /**
+     * Finished; [outputs] is the raw per-node outputs object. [durationMs] is the time from
+     * execution start to finish (not counting the queue), if the server reported it.
+     */
+    data class Completed(val outputs: JsonObject, val durationMs: Long? = null) : ComfyHistoryResult()
 
-    data class Error(val message: String) : ComfyHistoryResult()
+    data class Error(val message: String, val durationMs: Long? = null) : ComfyHistoryResult()
 }

@@ -213,6 +213,11 @@ data class MediaInfo(
     val values: List<FormValue> = emptyList(),
     val files: List<FileValue> = emptyList(),
     val error: String? = null,
+    /**
+     * How long the image generator spent on it, not counting time in the queue
+     * (includes model loading). Null if unknown, e.g. made before this was recorded.
+     */
+    val generationMs: Long? = null,
 ) {
     companion object {
         const val ORIGIN_GENERATED = "generated"

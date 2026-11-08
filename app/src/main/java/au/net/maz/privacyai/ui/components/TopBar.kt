@@ -52,7 +52,7 @@ import au.net.maz.privacyai.ui.LocalNav
 import au.net.maz.privacyai.ui.Routes
 
 /** An item in a screen's hamburger menu. */
-data class MenuItem(val label: String, val onClick: () -> Unit)
+data class MenuItem(val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector? = null, val onClick: () -> Unit)
 
 /**
  * Every screen's frame: title bar with the status ring (always) and, when the screen has

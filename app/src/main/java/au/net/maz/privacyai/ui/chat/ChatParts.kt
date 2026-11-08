@@ -1,5 +1,14 @@
 package au.net.maz.privacyai.ui.chat
 
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.BoxWithConstraints
 import android.net.Uri
@@ -131,7 +140,7 @@ fun splitThink(text: String): Pair<String?, String> {
  * One message. Characters' messages use their colour as the background with their name
  * small at the top. Long-press for message actions.
  */
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun MessageBubble(
     text: String,
@@ -143,7 +152,12 @@ fun MessageBubble(
     attachments: List<String> = emptyList(),
     pending: Boolean = false,
     error: String? = null,
+    /** Buttons shown under the message while it's [selected] (tap to select). */
     actions: List<MenuItem> = emptyList(),
+    selected: Boolean = false,
+    onSelect: () -> Unit = {},
+    /** Long-press opens a small Copy menu where you pressed. */
+    onCopy: (() -> Unit)? = null,
     onOpenMedia: (String) -> Unit = {},
     versionIndex: Int = 0,
     versionCount: Int = 1,
@@ -155,7 +169,9 @@ fun MessageBubble(
     roleplayWidths: Boolean = false,
 ) {
     val store = LocalStore.current
-    var menu by remember { mutableStateOf(false) }
+    var copyAt by remember { mutableStateOf<Offset?>(null) }
+    var bubbleHeight by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
     var showThink by remember { mutableStateOf(false) }
     val (think, answer) = remember(text) { splitThink(text) }
     BoxWithConstraints(Modifier.fillMaxWidth()) {
@@ -169,12 +185,19 @@ fun MessageBubble(
         Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp),
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
     ) {
+        Column(horizontalAlignment = if (isUser) Alignment.End else Alignment.Start) {
         Box {
             Column(
                 bubbleWidth
                     .clip(RoundedCornerShape(16.dp))
                     .background(background)
-                    .combinedClickable(onClick = {}, onLongClick = { if (actions.isNotEmpty()) menu = true })
+                    .onSizeChanged { bubbleHeight = it.height }
+                    .pointerInput(onCopy) {
+                        detectTapGestures(
+                            onTap = { onSelect() },
+                            onLongPress = { pos -> if (onCopy != null) copyAt = pos },
+                        )
+                    }
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             ) {
                 name?.let { Text(it, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = nameColour) }
@@ -214,11 +237,48 @@ fun MessageBubble(
                     }
                 }
             }
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                actions.forEach { a -> DropdownMenuItem(text = { Text(a.label) }, onClick = { menu = false; a.onClick() }) }
+            // Copy, next to where the finger was (the offset is from the bubble's bottom-left).
+            val at = copyAt
+            DropdownMenu(
+                expanded = at != null,
+                onDismissRequest = { copyAt = null },
+                offset = with(density) { DpOffset((at?.x ?: 0f).toDp(), ((at?.y ?: 0f) - bubbleHeight).toDp()) },
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Copy") },
+                    leadingIcon = { Icon(Icons.Filled.ContentCopy, null) },
+                    onClick = { copyAt = null; onCopy?.invoke() },
+                )
             }
         }
+        if (selected && actions.isNotEmpty()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.padding(top = 4.dp),
+            ) {
+                actions.forEach { a -> ActionChip(a) }
+            }
+        }
+        }
     }
+    }
+}
+
+/** A small button under a selected message (like the old app's action chips). */
+@Composable
+private fun ActionChip(item: MenuItem) {
+    val tint = if (item.label == "Delete") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .clickable(onClick = item.onClick)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        item.icon?.let { Icon(it, null, tint = tint, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)) }
+        Text(item.label, fontSize = 13.sp, color = tint)
     }
 }
 

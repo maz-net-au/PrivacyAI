@@ -1,5 +1,8 @@
 package au.net.maz.privacyai.ui.chat
 
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.PlayArrow
 import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
@@ -133,6 +136,8 @@ fun ChatScreen(routeId: String) {
     val tasks by app.tasks.ids.collectAsState()
     val busy = app.engine.replyTaskId(id) in tasks
     var input by kept("input") { "" }
+    // The message whose buttons are showing (tap a message to show/hide them).
+    var selectedId by kept<String?>("selected") { null }
     val attachments = screenState("attachments") { mutableStateListOf<String>() }
     val owner = MediaOwner.chat(id)
     val photos = rememberPhotoSources(owner) { attachments += it.id }
@@ -177,14 +182,28 @@ fun ChatScreen(routeId: String) {
                         pending = m.pending,
                         error = m.error,
                         onOpenMedia = openMedia(),
+                        selected = selectedId == m.id,
+                        onSelect = { selectedId = if (selectedId == m.id) null else m.id },
+                        onCopy = { copyText(context, stripThink(m.text)) },
                         actions = buildList {
-                            add(MenuItem("Copy") { copyText(context, stripThink(m.text)) })
                             if (!m.isUser && isLast && !busy) {
-                                add(MenuItem("Continue") { app.engine.continueUtility(id, m.id) })
-                                add(MenuItem("Regenerate") { app.engine.regenerateUtility(id, m.id) })
+                                add(MenuItem("Continue", Icons.Filled.PlayArrow) { selectedId = null; app.engine.continueUtility(id, m.id) })
+                                add(MenuItem("Regenerate", Icons.Filled.Refresh) { selectedId = null; app.engine.regenerateUtility(id, m.id) })
                             }
-                            if (!busy) add(MenuItem("Delete") {
-                                scope.launch { store.updateChat(id) { c -> c.copy(messages = c.messages.filter { it.id != m.id }) } }
+                            if (!busy) add(MenuItem("Delete", Icons.Filled.Delete) {
+                                selectedId = null
+                                // Deleting the last reply also takes back the message of yours
+                                // just before it, into the input box (as the old app did).
+                                val msgs = chat?.messages.orEmpty()
+                                val i = msgs.indexOfFirst { it.id == m.id }
+                                val prev = msgs.getOrNull(i - 1)?.takeIf { i == msgs.lastIndex && !m.isUser && it.isUser }
+                                if (prev != null) {
+                                    input = prev.text
+                                    attachments.clear()
+                                    attachments += prev.attachments.map { it.mediaId }
+                                }
+                                val gone = setOfNotNull(m.id, prev?.id)
+                                scope.launch { store.updateChat(id) { c -> c.copy(messages = c.messages.filter { it.id !in gone }) } }
                             })
                         },
                     )

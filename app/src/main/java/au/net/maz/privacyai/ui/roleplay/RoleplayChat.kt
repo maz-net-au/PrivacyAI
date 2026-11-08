@@ -1,5 +1,10 @@
 package au.net.maz.privacyai.ui.roleplay
 
+import androidx.compose.material.icons.filled.ImageSearch
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.draw.clip
@@ -87,6 +92,8 @@ fun RoleplayChatScreen(id: String) {
     val snackbar = remember { SnackbarHostState() }
 
     var input by kept("input") { "" }
+    // The message whose buttons are showing (tap a message to show/hide them).
+    var selectedId by kept<String?>("selected") { null }
     val attachments = screenState("attachments") { mutableStateListOf<Attachment>() }
     var speaker by kept<String?>("speaker") { null }
     var editing by kept<String?>("editing") { null }
@@ -169,19 +176,34 @@ fun RoleplayChatScreen(id: String) {
                         pending = m.pending,
                         error = m.error,
                         onOpenMedia = openMedia(),
+                        selected = selectedId == m.id,
+                        onSelect = { selectedId = if (selectedId == m.id) null else m.id },
+                        onCopy = { copyText(context, stripThink(m.text)) },
                         actions = buildList {
-                            add(MenuItem("Copy") { copyText(context, stripThink(m.text)) })
                             if (!busy) {
-                                add(MenuItem("Edit") { editing = m.id; editText = m.text })
+                                add(MenuItem("Edit", Icons.Filled.Edit) { selectedId = null; editing = m.id; editText = m.text })
                                 if (!m.isUser && isLast) {
-                                    add(MenuItem("Continue") { app.engine.continueRoleplay(id, m.id) })
-                                    add(MenuItem("Regenerate") { app.engine.regenerateRoleplay(id, m.id) })
+                                    add(MenuItem("Continue", Icons.Filled.PlayArrow) { selectedId = null; app.engine.continueRoleplay(id, m.id) })
+                                    add(MenuItem("Regenerate", Icons.Filled.Refresh) { selectedId = null; app.engine.regenerateRoleplay(id, m.id) })
                                 }
-                                add(MenuItem("Delete") {
-                                    scope.launch { store.updateRoleplay(id) { r -> r.copy(messages = r.messages.filter { it.id != m.id }) } }
+                                add(MenuItem("Delete", Icons.Filled.Delete) {
+                                    selectedId = null
+                                    // Deleting the last reply also takes back the message of yours
+                                    // just before it, into the input box (as the old app did).
+                                    val msgs = rp.messages
+                                    val prev = msgs.getOrNull(msgs.indexOfFirst { it.id == m.id } - 1)
+                                        ?.takeIf { isLast && !m.isUser && it.isUser }
+                                    if (prev != null) {
+                                        input = prev.text
+                                        attachments.clear()
+                                        attachments += prev.attachments
+                                    }
+                                    val gone = setOfNotNull(m.id, prev?.id)
+                                    scope.launch { store.updateRoleplay(id) { r -> r.copy(messages = r.messages.filter { it.id !in gone }) } }
                                 })
                             }
-                            if (m.attachments.any { it.description.isBlank() }) add(MenuItem("Describe images") {
+                            if (m.attachments.any { it.description.isBlank() }) add(MenuItem("Describe images", Icons.Filled.ImageSearch) {
+                                selectedId = null
                                 describeInto(app, store, scope, id, m.id, rp.effectiveDescriptionModel) { err ->
                                     scope.launch { snackbar.showSnackbar(err) }
                                 }

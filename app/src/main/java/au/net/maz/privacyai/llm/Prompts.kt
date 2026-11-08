@@ -99,11 +99,15 @@ object Prompts {
         out += history
         if (forcedSpeaker != null && rp.characters.size > 1) out += apiText("assistant", "${forcedSpeaker.name}:")
         val user = userName(rp)
+        // Stop when anyone else's turn starts: you, or any character, at the start of a line.
+        // Characters only with the newline: with several characters the reply itself begins
+        // with "Name:", which must not stop it.
+        val stops = listOf("\n$user:", "$user:") + rp.characters.filter { it.name.isNotBlank() }.map { "\n${it.name}:" }
         return request(
             model = rp.model,
             messages = out,
             preset = preset,
-            stop = listOf("\n$user:", "$user:"),
+            stop = stops.distinct(),
         )
     }
 

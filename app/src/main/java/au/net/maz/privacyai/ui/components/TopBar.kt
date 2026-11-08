@@ -123,7 +123,7 @@ fun StatusRing() {
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             StatusLine("LLM", health.llm)
-            StatusLine("Image generator", health.image)
+            StatusLine("IMG", health.image)
             Text(
                 if (tasks.isEmpty()) "No tasks running" else "${tasks.size} task${if (tasks.size == 1) "" else "s"} running",
                 style = MaterialTheme.typography.bodySmall,

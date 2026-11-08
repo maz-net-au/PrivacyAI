@@ -35,13 +35,16 @@ import kotlinx.coroutines.withTimeoutOrNull
  */
 class TaskManager(private val context: Context, private val scope: CoroutineScope) {
 
-    private class Entry(val job: Job?, val onCancel: (suspend () -> Unit)?)
+    private class Entry(val job: Job?, val onCancel: (suspend () -> Unit)?, val startedAt: Long = System.currentTimeMillis())
 
     private val entries = mutableMapOf<String, Entry>()
     private val _ids = MutableStateFlow<Set<String>>(emptySet())
     val ids: StateFlow<Set<String>> = _ids
 
     val count: Int get() = _ids.value.size
+
+    /** When the longest-running current task started (wall clock ms), or null if none. */
+    fun oldestStart(): Long? = synchronized(entries) { entries.values.minOfOrNull { it.startedAt } }
 
     /** Run [block] as a counted task. A task with the same id is cancelled first. */
     fun launch(id: String, block: suspend CoroutineScope.() -> Unit): Job {
@@ -109,7 +112,7 @@ class TaskService : Service() {
         ensureChannel()
         val tasks = (application as PrivacyApp).tasks
         ServiceCompat.startForeground(
-            this, NOTIF_ID, build(tasks.count),
+            this, NOTIF_ID, build(tasks.count, tasks.oldestStart()),
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC else 0,
         )
         scope.coroutineContext[Job]?.children?.forEach { it.cancel() }
@@ -120,14 +123,18 @@ class TaskService : Service() {
                     ServiceCompat.stopForeground(this@TaskService, ServiceCompat.STOP_FOREGROUND_REMOVE)
                     stopSelf()
                 } else {
-                    getSystemService(NotificationManager::class.java).notify(NOTIF_ID, build(ids.size))
+                    getSystemService(NotificationManager::class.java).notify(NOTIF_ID, build(ids.size, tasks.oldestStart()))
                 }
             }
         }
         return START_NOT_STICKY
     }
 
-    private fun build(n: Int): Notification {
+    /**
+     * [since]: start of the longest-running task. The system counts the elapsed time up
+     * on its own (a chronometer), so the notification isn't re-posted every second.
+     */
+    private fun build(n: Int, since: Long?): Notification {
         val open = PendingIntent.getActivity(
             this, 0,
             Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
@@ -137,6 +144,13 @@ class TaskService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_tasks)
             .setContentTitle(text)
+            .apply {
+                if (since != null) {
+                    setWhen(since)
+                    setShowWhen(true)
+                    setUsesChronometer(true)
+                }
+            }
             .setOngoing(true)
             .setVisibility(NotificationCompat.VISIBILITY_SECRET)
             .setPriority(NotificationCompat.PRIORITY_LOW)

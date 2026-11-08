@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -35,7 +36,8 @@ val PrivateText = KeyboardOptions(capitalization = KeyboardCapitalization.Senten
 
 /**
  * A large text field with a "Generate" option (LLM). While generating, the text streams
- * in and the button becomes "Stop". An optional guidance line lets the user steer it.
+ * in and the button becomes "Stop". Optional guidance lets the user steer it: a field under
+ * the text, or with [guidanceInDialog], a dialog that opens when Generate is pressed.
  */
 @Composable
 fun GenerateField(
@@ -49,9 +51,20 @@ fun GenerateField(
     onStop: () -> Unit = {},
     generateLabel: String = "Generate",
     error: String? = null,
+    guidanceInDialog: Boolean = false,
 ) {
     var hint by remember { mutableStateOf("") }
     var showHint by remember { mutableStateOf(false) }
+    var dialog by remember { mutableStateOf(false) }
+    if (dialog && onGenerate != null) {
+        GuidanceDialog(
+            title = (if (value.isBlank()) "Generate " else "Change ") + label.lowercase(),
+            help = if (value.isBlank()) "Optional: a hint for what to write."
+            else "Optional: how to change the current text. Leave empty for a fresh version.",
+            onDismiss = { dialog = false },
+            onGenerate = { g -> dialog = false; onGenerate(g) },
+        )
+    }
     Column(modifier.fillMaxWidth()) {
         OutlinedTextField(
             value = value,
@@ -63,7 +76,7 @@ fun GenerateField(
             modifier = Modifier.fillMaxWidth(),
         )
         if (onGenerate != null) {
-            if (showHint && !generating) {
+            if (showHint && !generating && !guidanceInDialog) {
                 OutlinedTextField(
                     value = hint,
                     onValueChange = { hint = it },
@@ -86,12 +99,41 @@ fun GenerateField(
                     Spacer(Modifier.width(8.dp))
                     TextButton(onClick = onStop) { Text("Stop") }
                 } else {
-                    TextButton(onClick = { showHint = !showHint }) { Text(if (showHint) "Hide guidance" else "Guidance") }
-                    TextButton(onClick = { onGenerate(hint) }) { Text(generateLabel) }
+                    if (guidanceInDialog) {
+                        TextButton(onClick = { dialog = true }) { Text(generateLabel) }
+                    } else {
+                        TextButton(onClick = { showHint = !showHint }) { Text(if (showHint) "Hide guidance" else "Guidance") }
+                        TextButton(onClick = { onGenerate(hint) }) { Text(generateLabel) }
+                    }
                 }
             }
         }
     }
+}
+
+/** Asks for optional guidance before generating. Starts empty each time. */
+@Composable
+private fun GuidanceDialog(title: String, help: String, onDismiss: () -> Unit, onGenerate: (String) -> Unit) {
+    var text by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                Text(help, style = MaterialTheme.typography.bodyMedium)
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text("Guidance") },
+                    minLines = 2,
+                    keyboardOptions = PrivateText,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { onGenerate(text.trim()) }) { Text("Generate") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 /** A dropdown for picking one of [options]. */

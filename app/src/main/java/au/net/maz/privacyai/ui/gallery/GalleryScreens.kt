@@ -101,7 +101,7 @@ fun MediaGridScreen(owner: String, resultKey: String) {
     ) { pad ->
         val open: (Media) -> Unit = { m ->
             if (picking) { app.results.put(resultKey, m.id); nav.popBackStack() }
-            else nav.navigate(Routes.viewer(m.id))
+            else nav.navigate(Routes.viewer(m.id, owner, GalleryTab.entries[tab].kind))
         }
         if (picking) {
             // Picking a reference image: images only, no tabs.
@@ -166,19 +166,42 @@ private fun MediaGrid(shown: List<Media>, empty: String, onOpen: (Media) -> Unit
     }
 }
 
-/** One media item: view/play it, its details, and Regenerate / Export / Delete. */
+/**
+ * One media item: view/play it, its details, and Regenerate / Export / Delete.
+ * Opened from a gallery ([owner], and [kind] for its tab), swiping left/right moves through
+ * that gallery. Swipes aren't navigation steps, so Back always leaves the viewer.
+ */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun ViewerScreen(id: String) {
+fun ViewerScreen(id: String, owner: String, kind: MediaKind?) {
     val app = LocalApp.current
     val store = LocalStore.current
     val nav = LocalNav.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val snackbar = remember { SnackbarHostState() }
-    val media by store.observeMediaItem(id).collectAsState(initial = null)
+
+    // The items to swipe through: the gallery (as its tab showed it), or just this one.
+    val single by store.observeMediaItem(id).collectAsState(initial = null)
+    val galleryItems by remember(owner) {
+        if (owner.isBlank()) kotlinx.coroutines.flow.flowOf(null) else store.observeMedia(owner)
+    }.collectAsState(initial = null)
+    val list: List<Media>? = if (owner.isBlank()) single?.let { listOf(it) }
+    else galleryItems?.filter { kind == null || it.kind == kind }
+    if (list == null) {
+        AppScaffold(title = "", onBack = { nav.popBackStack() }) {}
+        return
+    }
+    if (list.isEmpty()) {
+        LaunchedEffect(Unit) { nav.popBackStack() }
+        return
+    }
+
+    val start = remember { list.indexOfFirst { it.id == id }.coerceAtLeast(0) }
+    val pager = rememberPagerState(initialPage = start) { list.size }
+    val m = list[pager.currentPage.coerceIn(0, list.lastIndex)]
 
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri ->
-        val m = media ?: return@rememberLauncherForActivityResult
         val fileId = m.fileId ?: return@rememberLauncherForActivityResult
         if (uri != null) scope.launch {
             runCatching {
@@ -189,42 +212,44 @@ fun ViewerScreen(id: String) {
         }
     }
 
-    val m = media
-    AppScaffold(title = m?.info?.workflowName?.ifBlank { null } ?: m?.kind?.label ?: "", onBack = { nav.popBackStack() }, snackbar = snackbar) { pad ->
-        if (m == null) return@AppScaffold
-        val actions = @Composable {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
-                val wf = m.info.workflowId
-                if (wf != null) OutlinedButton(onClick = { nav.navigate(Routes.form(wf, m.owner, from = m.id)) }) { Text("Regenerate") }
-                if (m.status == MediaStatus.DONE) OutlinedButton(onClick = {
-                    exporter.launch("privacyai-${m.createdAt}.${ComfyRunner.extFor(m.mime)}")
-                }) { Text("Export") }
-                OutlinedButton(onClick = {
-                    scope.launch {
-                        val r = snackbar.showSnackbar(
-                            if (m.status == MediaStatus.PENDING) "Cancel and delete this item?" else "Delete this item?",
-                            actionLabel = "Delete", withDismissAction = true,
-                        )
-                        if (r == SnackbarResult.ActionPerformed) {
-                            app.runner?.cancelForMedia(m.id)
-                            store.deleteMedia(m.id)
-                            nav.popBackStack()
+    AppScaffold(title = m.info.workflowName.ifBlank { null } ?: m.kind.label, onBack = { nav.popBackStack() }, snackbar = snackbar) { pad ->
+        HorizontalPager(pager, Modifier.padding(pad).fillMaxSize(), key = { list[it].id }) { page ->
+            val item = list[page]
+            val actions = @Composable {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
+                    val wf = item.info.workflowId
+                    if (wf != null) OutlinedButton(onClick = { nav.navigate(Routes.form(wf, item.owner, from = item.id)) }) { Text("Regenerate") }
+                    if (item.status == MediaStatus.DONE) OutlinedButton(onClick = {
+                        exporter.launch("privacyai-${item.createdAt}.${ComfyRunner.extFor(item.mime)}")
+                    }) { Text("Export") }
+                    OutlinedButton(onClick = {
+                        scope.launch {
+                            val r = snackbar.showSnackbar(
+                                if (item.status == MediaStatus.PENDING) "Cancel and delete this item?" else "Delete this item?",
+                                actionLabel = "Delete", withDismissAction = true,
+                            )
+                            if (r == SnackbarResult.ActionPerformed) {
+                                app.runner?.cancelForMedia(item.id)
+                                store.deleteMedia(item.id)
+                                // Stay on the next item; leave if that was the last one.
+                                if (list.size <= 1) nav.popBackStack()
+                            }
                         }
-                    }
-                }) { Text("Delete") }
-            }
-        }
-        val details = @Composable { Details(m, actions) }
-        BoxWithConstraints(Modifier.padding(pad).fillMaxSize()) {
-            if (maxWidth > maxHeight) {
-                Row(Modifier.fillMaxSize()) {
-                    MediaFull(m, Modifier.weight(1.4f).fillMaxHeight())
-                    Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(12.dp)) { details() }
+                    }) { Text("Delete") }
                 }
-            } else {
-                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                    MediaFull(m, Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 560.dp))
-                    Column(Modifier.padding(12.dp)) { details() }
+            }
+            val details = @Composable { Details(item, actions) }
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                if (maxWidth > maxHeight) {
+                    Row(Modifier.fillMaxSize()) {
+                        MediaFull(item, Modifier.weight(1.4f).fillMaxHeight())
+                        Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(12.dp)) { details() }
+                    }
+                } else {
+                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                        MediaFull(item, Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 560.dp))
+                        Column(Modifier.padding(12.dp)) { details() }
+                    }
                 }
             }
         }

@@ -172,26 +172,50 @@ object Prompts {
     // ---- text fields with a Generate option ---------------------------------------------
 
     /**
-     * New: write one character field. Uses the other fields, plus the roleplay so far when
-     * the character is in a roleplay (so characters added mid-session are filled in from the
-     * conversation). The "state" field follows the old app's "Update with LLM".
+     * New: write one character field. The rest of the character sheet (whatever is filled in)
+     * is always context; in a roleplay, so is the roleplay so far (so characters added
+     * mid-session are filled in from the conversation).
+     * Empty field: write a new one, with [hint] as a hint. Filled field: change the current
+     * value, steered by [hint] (no hint: a fresh version). "state" with no hint is the old
+     * app's "Update with LLM".
      */
     fun characterField(field: String, c: Character, rp: Roleplay?, model: String, hint: String): ChatRequest {
         val user = rp?.let(::userName) ?: "the user"
+        val current = when (field) {
+            "name" -> c.name
+            "description" -> c.description
+            "greeting" -> c.greeting
+            "persona" -> c.systemPrompt
+            "state" -> c.state
+            else -> ""
+        }.trim()
         val sheet = buildString {
-            if (c.name.isNotBlank()) appendLine("Name: ${c.name}")
+            if (c.name.isNotBlank() && field != "name") appendLine("Name: ${c.name}")
             if (c.description.isNotBlank() && field != "description") appendLine("Short description: ${c.description}")
             if (c.systemPrompt.isNotBlank() && field != "persona") appendLine("Persona: ${c.systemPrompt}")
             if (c.greeting.isNotBlank() && field != "greeting") appendLine("Greeting: ${c.greeting}")
-            if (c.state.isNotBlank()) appendLine("${if (field == "state") "Previous state" else "Current state"}: ${c.state}")
+            if (c.state.isNotBlank() && field != "state") appendLine("Current state: ${c.state}")
         }.trim()
-        val ask = when (field) {
-            "name" -> "Suggest a fitting name for this character. Output only the name."
-            "description" -> "Write a one-line description of this character (under 20 words). Output only the description."
-            "greeting" -> "Write this character's opening message to $user, in character, as the first line of a roleplay. Use {{user}} for the user's name. Output only the message."
-            "persona" -> "Write this character's persona for a roleplay system prompt: personality, appearance, manner of speaking, background and goals, in second person (\"You are...\"). Use {{char}} and {{user}} for the names. Output only the persona."
-            "state" -> "Rewrite this character's current state from the conversation so far: appearance and clothing, physical condition, location, possessions, relationships and feelings toward others. Keep what still applies, change what changed. Be concise. Output only the state notes."
-            else -> "Write the $field. Output only the text."
+        // What the field is, and the rules for writing it.
+        val (thing, rules) = when (field) {
+            "name" -> "name" to "Output only the name."
+            "description" -> "one-line description" to "Keep it under 20 words. Output only the description."
+            "greeting" -> "greeting (opening message to $user, in character, as the first line of a roleplay)" to
+                "Use {{user}} for the user's name. Output only the message."
+            "persona" -> "persona for a roleplay system prompt (personality, appearance, manner of speaking, background and goals)" to
+                "Write it in second person (\"You are...\"). Use {{char}} and {{user}} for the names. Output only the persona."
+            "state" -> "current state notes (appearance and clothing, physical condition, location, possessions, relationships and feelings toward others)" to
+                "Be concise. Output only the state notes."
+            else -> field to "Output only the text."
+        }
+        val ask = when {
+            current.isBlank() && hint.isBlank() -> "Write this character's $thing. $rules"
+            current.isBlank() -> "Write this character's $thing. Use this as a hint: $hint\n$rules"
+            hint.isNotBlank() -> "Change the character's current $thing as follows: $hint\n" +
+                "Keep anything that this doesn't ask to change. $rules"
+            field == "state" && rp != null -> "Rewrite this character's $thing from the conversation so far. " +
+                "Keep what still applies, change what changed. $rules"
+            else -> "Write a new version of the character's $thing. $rules"
         }
         val userTurn = buildString {
             if (rp != null) {
@@ -201,7 +225,7 @@ object Prompts {
                 }
             }
             if (sheet.isNotBlank()) { appendLine("## Character sheet"); appendLine(sheet); appendLine() }
-            if (hint.isNotBlank()) { appendLine("Guidance from the user: $hint"); appendLine() }
+            if (current.isNotBlank()) { appendLine("## Current $field"); appendLine(current); appendLine() }
             append(ask)
         }
         return fixed(
@@ -215,30 +239,41 @@ object Prompts {
     /** New: generate "my description" for the user in a roleplay. */
     fun myDescription(rp: Roleplay, model: String, hint: String): ChatRequest {
         val user = userName(rp)
+        val current = rp.myDescription.trim()
+        val thing = "short description of $user, the user's character in this roleplay (appearance, personality and role)"
         val turn = buildString {
             roleplayBackground(rp.copy(myDescription = "")).takeIf { it.isNotBlank() }?.let { appendLine(it); appendLine() }
             transcript(rp).takeIf { it.isNotBlank() }?.let { appendLine("## Conversation so far"); appendLine(it); appendLine() }
-            if (hint.isNotBlank()) { appendLine("Guidance: $hint"); appendLine() }
-            append("Write a short description of $user, the user's character in this roleplay: appearance, personality and role. Output only the description.")
+            if (current.isNotBlank()) { appendLine("## Current description of $user"); appendLine(current); appendLine() }
+            append(guidedAsk(thing, current, hint, "Write a new version of the $thing."))
+            append(" Output only the description.")
         }
-        return fixed(rp.model, "You help write roleplays. Output only what is asked for.", turn, maxTokens = 600)
-            .copy(model = model)
+        return fixed(model, "You help write roleplays. Output only what is asked for.", turn, maxTokens = 600)
     }
 
     /** Summary / background, generated from the conversation (old app's summarise step). */
     fun summary(rp: Roleplay, model: String, hint: String): ChatRequest {
+        val current = rp.summaryBackground.trim()
+        val thing = "concise summary of the story so far (key events, where things stand now, and anything that must be remembered)"
         val turn = buildString {
-            if (rp.summaryBackground.isNotBlank()) {
-                appendLine("## Summary so far"); appendLine(rp.summaryBackground); appendLine()
-            }
             transcript(rp).takeIf { it.isNotBlank() }?.let { appendLine("## Conversation"); appendLine(it); appendLine() }
-            if (hint.isNotBlank()) { appendLine("Guidance: $hint"); appendLine() }
-            append(
-                "Write a concise summary of the story so far: key events, where things stand now, " +
-                    "and anything that must be remembered. Output only the summary.",
-            )
+            if (current.isNotBlank()) { appendLine("## Current summary"); appendLine(current); appendLine() }
+            // Filled in with no guidance: bring the summary up to date with the conversation.
+            append(guidedAsk(thing, current, hint, "Rewrite the summary so it is up to date with the conversation, keeping what still matters."))
+            append(" Output only the summary.")
         }
         return fixed(model, "You summarise roleplay stories accurately and concisely.", turn, maxTokens = 1200)
+    }
+
+    /**
+     * The request for a field with Generate: empty -> write one (guidance as a hint);
+     * filled in -> change it as the guidance says, or [refresh] without guidance.
+     */
+    private fun guidedAsk(thing: String, current: String, hint: String, refresh: String): String = when {
+        current.isBlank() && hint.isBlank() -> "Write a $thing."
+        current.isBlank() -> "Write a $thing. Use this as a hint: $hint"
+        hint.isNotBlank() -> "Change the current text as follows: $hint\nKeep anything that this doesn't ask to change."
+        else -> refresh
     }
 
     /** A plain one-shot request with the image-prompt sampling. */

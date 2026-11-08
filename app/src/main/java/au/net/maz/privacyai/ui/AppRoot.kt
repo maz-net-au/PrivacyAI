@@ -33,6 +33,7 @@ import au.net.maz.privacyai.ui.chat.ChatScreen
 import au.net.maz.privacyai.ui.gallery.MediaGridScreen
 import au.net.maz.privacyai.ui.gallery.ViewerScreen
 import au.net.maz.privacyai.ui.generate.FocusScreen
+import au.net.maz.privacyai.ui.generate.InputPickerScreen
 import au.net.maz.privacyai.ui.generate.SectionScreen
 import au.net.maz.privacyai.ui.generate.WorkflowFormScreen
 import au.net.maz.privacyai.ui.home.HomeScreen
@@ -68,7 +69,8 @@ object Routes {
     const val FORM = "form/{workflow}?owner={owner}&from={from}&result={result}&popTo={popTo}"
     const val FOCUS = "focus?owner={owner}&result={result}"
     const val GALLERY = "gallery/{owner}?result={result}"
-    const val VIEWER = "viewer/{id}"
+    const val VIEWER = "viewer/{id}?owner={owner}&kind={kind}"
+    const val INPUT_PICKER = "input/{kind}?owner={owner}&result={result}"
 
     private fun e(s: String) = Uri.encode(s)
 
@@ -85,7 +87,15 @@ object Routes {
     fun focus(owner: String, result: String) = "focus?owner=${e(owner)}&result=${e(result)}"
     /** A media grid. With [result], tapping an item picks it. */
     fun gallery(owner: String, result: String = "") = "gallery/${e(owner)}?result=${e(result)}"
-    fun viewer(id: String) = "viewer/${e(id)}"
+    /**
+     * View one item. With [owner], swiping moves through that gallery (only [kind] if
+     * given, matching the gallery's tab); without, just this item.
+     */
+    fun viewer(id: String, owner: String = "", kind: MediaKind? = null) =
+        "viewer/${e(id)}?owner=${e(owner)}&kind=${kind?.key.orEmpty()}"
+    /** Choose a file for a workflow input (Roleplay / Device / Gallery tabs). */
+    fun inputPicker(kind: MediaKind, owner: String, result: String) =
+        "input/${kind.key}?owner=${e(owner)}&result=${e(result)}"
 
     fun newResultKey() = Ids.new("r_")
 }
@@ -148,7 +158,12 @@ private fun MainNav() {
             composable(Routes.GALLERY, listOf(str("owner"), str("result"))) {
                 MediaGridScreen(it.arg("owner").ifBlank { MediaOwner.GALLERY }, it.arg("result"))
             }
-            composable(Routes.VIEWER, listOf(str("id"))) { ViewerScreen(it.arg("id")) }
+            composable(Routes.VIEWER, listOf(str("id"), str("owner"), str("kind"))) {
+                ViewerScreen(it.arg("id"), it.arg("owner"), it.arg("kind").ifBlank { null }?.let(MediaKind::fromKey))
+            }
+            composable(Routes.INPUT_PICKER, listOf(str("kind"), str("owner"), str("result"))) {
+                InputPickerScreen(it.arg("owner").ifBlank { MediaOwner.GALLERY }, MediaKind.fromKey(it.arg("kind")), it.arg("result"))
+            }
         }
     }
 }

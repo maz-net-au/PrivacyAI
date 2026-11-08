@@ -248,12 +248,14 @@ fun RoleplaySetupScreen(routeId: String) {
                     label = "My description", value = myDescription, onValueChange = { myDescription = it },
                     generating = "gen:$id:mydescription" in tasks,
                     onGenerate = { gen("mydescription", it) }, onStop = { app.tasks.cancel("gen:$id:mydescription") },
+                    guidanceInDialog = true,
                 )
                 GenerateField(
                     label = "Summary / background", value = summary, onValueChange = { summary = it },
                     generating = "gen:$id:summary" in tasks, generateLabel = "Generate from conversation",
                     onGenerate = { gen("summary", it) }, onStop = { app.tasks.cancel("gen:$id:summary") },
                     error = genError,
+                    guidanceInDialog = true,
                 )
 
                 SectionTitle("Characters")

@@ -1,5 +1,7 @@
 package au.net.maz.privacyai.ui.characters
 
+import au.net.maz.privacyai.ui.components.PrivateText
+import androidx.compose.material3.OutlinedTextField
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Dispatchers
 import au.net.maz.privacyai.ui.components.MenuItem
@@ -284,6 +286,7 @@ fun CharacterEditScreen(owner: String, routeId: String) {
         onGenerate = { gen(key, it) },
         onStop = { app.tasks.cancel("gen:${c.id}:$key") },
         generateLabel = if (key == "state" && value.isNotBlank()) "Update" else "Generate",
+        guidanceInDialog = true,
     )
 
     AppScaffold(title = if (routeId == "new") "New character" else c.name.ifBlank { "Character" }, onBack = ::back) { pad ->
@@ -324,7 +327,9 @@ fun CharacterEditScreen(owner: String, routeId: String) {
                         }
                     }
                 }
-                field("Name", "name", c.name, { c = c.copy(name = it) }, lines = 1)
+                // Name and description are short: plain fields, no Generate.
+                OutlinedTextField(c.name, { c = c.copy(name = it) }, label = { Text("Name") }, singleLine = true,
+                    keyboardOptions = PrivateText, modifier = Modifier.fillMaxWidth())
                 // Colour
                 var colourOpen by remember { mutableStateOf(false) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -339,7 +344,8 @@ fun CharacterEditScreen(owner: String, routeId: String) {
                         c = c.copy(colour = it); colourOpen = false
                     }
                 }
-                field("Description", "description", c.description, { c = c.copy(description = it) }, lines = 1)
+                OutlinedTextField(c.description, { c = c.copy(description = it) }, label = { Text("Description") }, singleLine = true,
+                    keyboardOptions = PrivateText, modifier = Modifier.fillMaxWidth())
                 field("Greeting", "greeting", c.greeting, { c = c.copy(greeting = it) })
                 field("Persona / system prompt", "persona", c.systemPrompt, { c = c.copy(systemPrompt = it) }, lines = 5)
                 field("State", "state", c.state, { c = c.copy(state = it) })

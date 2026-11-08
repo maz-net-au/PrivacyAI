@@ -41,6 +41,7 @@ import au.net.maz.privacyai.comfy.GenJob
 import au.net.maz.privacyai.comfy.PatchOp
 import au.net.maz.privacyai.comfy.WorkflowField
 import au.net.maz.privacyai.comfy.WorkflowPatcher
+import au.net.maz.privacyai.data.model.MediaKind
 import au.net.maz.privacyai.data.model.FileValue
 import au.net.maz.privacyai.data.model.FormValue
 import au.net.maz.privacyai.data.model.MediaInfo
@@ -311,8 +312,8 @@ private fun FieldControl(f: FieldState, index: Int, owner: String, keyBase: Stri
         FieldType.FILE -> Row(verticalAlignment = Alignment.CenterVertically) {
             val media = f.mediaId?.let { store.observeMediaItem(it).collectAsState(initial = null).value }
             val pick = {
-                // Pick from this roleplay's gallery, or the main gallery outside a roleplay.
-                nav.navigate(Routes.gallery(owner, "$keyBase:f$index"))
+                // Roleplay / Device / Gallery tabs, for this input's kind of file.
+                nav.navigate(Routes.inputPicker(MediaKind.fromKey(f.spec.fileKind), owner, "$keyBase:f$index"))
             }
             MediaThumb(media, Modifier.size(84.dp).clip(RoundedCornerShape(10.dp)).combinedClickable(onClick = pick, onLongClick = { f.mediaId = null }))
             Spacer(Modifier.width(12.dp))

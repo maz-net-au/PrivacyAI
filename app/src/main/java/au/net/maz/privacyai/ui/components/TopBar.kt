@@ -10,6 +10,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -66,6 +67,8 @@ fun AppScaffold(
     snackbar: SnackbarHostState? = null,
     floatingActionButton: @Composable () -> Unit = {},
     bottomBar: @Composable () -> Unit = {},
+    /** Extra top-bar buttons, after the status ring (where the menu would be). */
+    actions: @Composable RowScope.() -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
     Scaffold(
@@ -79,6 +82,7 @@ fun AppScaffold(
                 },
                 actions = {
                     StatusRing()
+                    actions()
                     if (menu.isNotEmpty()) HamburgerMenu(menu)
                 },
             )

@@ -117,7 +117,7 @@ class ChatEngine(private val app: PrivacyApp) {
                 c.copy(
                     updatedAt = System.currentTimeMillis(),
                     messages = c.messages.map {
-                        if (it.id == replyId) it.withText(base + text).copy(pending = pending, error = error) else it
+                        if (it.id == replyId) it.withText(base + withoutEcho(stripThink(base), text)).copy(pending = pending, error = error) else it
                     },
                 )
             }
@@ -199,15 +199,17 @@ class ChatEngine(private val app: PrivacyApp) {
             }
         }
         val prefix = if (forced != null && rp.characters.size > 1) "${forced.name}:" else ""
+        // What was prefilled as the start of the reply, which newer servers send back first.
+        val prefill = if (mode == Mode.CONTINUE) Prompts.assistantText(rp, targetMsg!!) else prefix
         val used = streamIntoMessage(request, s.llmAddress) { raw, pending, error ->
             store.updateRoleplay(rpId) { r ->
                 r.copy(
                     updatedAt = System.currentTimeMillis(),
                     messages = r.messages.map {
                         if (it.id != replyId) it
-                        else if (mode == Mode.CONTINUE) it.withText(base + raw).copy(pending = pending, error = error)
+                        else if (mode == Mode.CONTINUE) it.withText(base + withoutEcho(prefill, raw)).copy(pending = pending, error = error)
                         else {
-                            val (speaker, text) = Prompts.parseSpeaker(r, prefix + raw, forced?.id)
+                            val (speaker, text) = Prompts.parseSpeaker(r, prefix + withoutEcho(prefill, raw), forced?.id)
                             it.withText(text).copy(speaker = speaker, pending = pending, error = error)
                         }
                     },
@@ -289,6 +291,23 @@ class ChatEngine(private val app: PrivacyApp) {
         val messages = listOf(apiText("system", Prompts.roleplaySystem(rp))) + history
         return Prompts.request(model, messages, preset, stop = rp.characters.map { "${it.name}:" } + "\n$user:")
             .copy(maxTokens = CONTINUE_TOKENS, ignoreEos = ignoreEos)
+    }
+
+    /**
+     * The part of [streamed] after an assistant [prefill] (a forced "Name:" or the text a
+     * Continue extends). Newer llama-server sends the prefill back at the start of the
+     * stream and older ones don't; either way the prefill ends up in the message exactly
+     * once (the old app's "stitch").
+     */
+    private fun withoutEcho(prefill: String, streamed: String): String {
+        val p = prefill.trimEnd()
+        if (p.isEmpty()) return streamed
+        val s = streamed.trimStart()
+        return when {
+            s.startsWith(p) -> s.substring(p.length)
+            p.startsWith(s) -> "" // still repeating the prefill
+            else -> streamed
+        }
     }
 
     /** Context usage after a reply; the context size is looked up once per model. */

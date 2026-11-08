@@ -1,5 +1,16 @@
 package au.net.maz.privacyai.ui.chat
 
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.foundation.interaction.DragInteraction
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.foundation.layout.FlowRow
@@ -217,7 +228,9 @@ fun MessageBubble(
                     )
                     if (showThink) Text(think, fontSize = 13.sp, color = textColour.copy(alpha = 0.7f))
                 }
-                if (answer.isNotBlank()) MarkdownText(answer, color = textColour)
+                // *Italics* (e.g. roleplay actions) in the message's accent colour: the
+                // character's own colour, readable on its bubble, and unlike the body text.
+                if (answer.isNotBlank()) MarkdownText(answer, color = textColour, italicColor = nameColour)
                 if (pending && answer.isBlank()) CircularProgressIndicator(Modifier.size(18.dp).padding(2.dp), strokeWidth = 2.dp)
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp) }
                 if (versionCount > 1) {
@@ -236,6 +249,18 @@ fun MessageBubble(
                         )
                     }
                 }
+                if (selected && actions.isNotEmpty()) {
+                    // Inside the bubble, scrolled into view when they appear.
+                    val bring = remember { BringIntoViewRequester() }
+                    LaunchedEffect(Unit) { bring.bringIntoView() }
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.padding(top = 8.dp).bringIntoViewRequester(bring),
+                    ) {
+                        actions.forEach { a -> ActionChip(a) }
+                    }
+                }
             }
             // Copy, next to where the finger was (the offset is from the bubble's bottom-left).
             val at = copyAt
@@ -251,29 +276,25 @@ fun MessageBubble(
                 )
             }
         }
-        if (selected && actions.isNotEmpty()) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.padding(top = 4.dp),
-            ) {
-                actions.forEach { a -> ActionChip(a) }
-            }
-        }
         }
     }
     }
 }
 
 /** A small button under a selected message (like the old app's action chips). */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ActionChip(item: MenuItem) {
+    val haptics = LocalHapticFeedback.current
     val tint = if (item.label == "Delete") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
     Row(
         Modifier
             .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = item.onClick)
+            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
+            .combinedClickable(
+                onClick = item.onClick,
+                onLongClick = item.onLongClick?.let { l -> { haptics.performHapticFeedback(HapticFeedbackType.LongPress); l() } },
+            )
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -326,9 +347,13 @@ fun ChatInput(
                         }
                     }
                 }
+                // Text set from outside (Impersonate streaming in) moves the cursor to the
+                // end, so the box scrolls to show the newest text.
+                var field by remember { mutableStateOf(TextFieldValue(text, TextRange(text.length))) }
+                if (field.text != text) field = TextFieldValue(text, TextRange(text.length))
                 OutlinedTextField(
-                    value = text,
-                    onValueChange = onText,
+                    value = field,
+                    onValueChange = { field = it; if (it.text != text) onText(it.text) },
                     placeholder = { Text("Message") },
                     maxLines = 6,
                     keyboardOptions = PrivateText,
@@ -370,4 +395,28 @@ fun ContextReadout(u: au.net.maz.privacyai.data.model.ContextUsage) {
 fun openMedia(): (String) -> Unit {
     val nav = LocalNav.current
     return { id -> nav.navigate(Routes.viewer(id)) }
+}
+
+/**
+ * Keeps a chat scrolled to the bottom of the newest message while it grows (streaming),
+ * so the newest text is always showing. Dragging the list stops following; scrolling back
+ * to the bottom, or a new message, starts it again.
+ */
+@Composable
+fun FollowNewest(listState: LazyListState, count: Int, lastLength: Int) {
+    var follow by remember { mutableStateOf(true) }
+    LaunchedEffect(listState) {
+        listState.interactionSource.interactions.collect { if (it is DragInteraction.Start) follow = false }
+    }
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.canScrollForward }.collect { if (!it) follow = true }
+    }
+    suspend fun toEnd() {
+        if (count == 0) return
+        val visible = listState.layoutInfo.visibleItemsInfo.any { it.index == count - 1 }
+        if (!visible) listState.scrollToItem(count - 1)
+        listState.scrollBy(100_000f) // stops at the end
+    }
+    LaunchedEffect(count) { follow = true; toEnd() }
+    LaunchedEffect(lastLength) { if (follow) toEnd() }
 }

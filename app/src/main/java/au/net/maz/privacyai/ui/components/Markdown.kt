@@ -28,7 +28,13 @@ import androidx.compose.ui.unit.sp
  * fenced code blocks, unordered lists, inline code, **bold** and *italic*.
  */
 @Composable
-fun MarkdownText(text: String, modifier: Modifier = Modifier, color: Color = Color.Unspecified) {
+fun MarkdownText(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified,
+    /** Colour for *italic* text; should stand out clearly from [color]. */
+    italicColor: Color = Color.Unspecified,
+) {
     val blocks = remember(text) { parseBlocks(text) }
     val body = if (color == Color.Unspecified) androidx.compose.material3.MaterialTheme.colorScheme.onSurface else color
     // Inline span styles depend on the theme, so build them in composition.
@@ -41,7 +47,8 @@ fun MarkdownText(text: String, modifier: Modifier = Modifier, color: Color = Col
     // System Roboto has no bundled italic face, so the synthesized slant is barely
     // visible — pair it with a distinct color so *italic* (e.g. roleplay *actions*)
     // reads as clearly different from body text.
-    val italicSpan = SpanStyle(fontStyle = FontStyle.Italic, color = body.copy(alpha = 0.72f))
+    val italic = if (italicColor == Color.Unspecified) androidx.compose.material3.MaterialTheme.colorScheme.primary else italicColor
+    val italicSpan = SpanStyle(fontStyle = FontStyle.Italic, color = italic)
     Column(modifier) {
         blocks.forEach { block ->
             when (block) {

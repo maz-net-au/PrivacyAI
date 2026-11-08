@@ -1,5 +1,6 @@
 package au.net.maz.privacyai.ui.roleplay
 
+import au.net.maz.privacyai.ui.chat.FollowNewest
 import androidx.compose.material.icons.filled.ImageSearch
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
@@ -129,9 +130,8 @@ fun RoleplayChatScreen(id: String) {
         return
     }
     val messages = rp.messages
-    LaunchedEffect(messages.size, messages.lastOrNull()?.text?.length) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
-    }
+    // Show the newest text as it's written.
+    FollowNewest(listState, messages.size, messages.lastOrNull()?.text?.length ?: 0)
 
     AppScaffold(
         title = rp.title.ifBlank { "Roleplay" },
@@ -181,11 +181,7 @@ fun RoleplayChatScreen(id: String) {
                         onCopy = { copyText(context, stripThink(m.text)) },
                         actions = buildList {
                             if (!busy) {
-                                add(MenuItem("Edit", Icons.Filled.Edit) { selectedId = null; editing = m.id; editText = m.text })
-                                if (!m.isUser && isLast) {
-                                    add(MenuItem("Continue", Icons.Filled.PlayArrow) { selectedId = null; app.engine.continueRoleplay(id, m.id) })
-                                    add(MenuItem("Regenerate", Icons.Filled.Refresh) { selectedId = null; app.engine.regenerateRoleplay(id, m.id) })
-                                }
+                                // Left to right: Delete, Edit, Continue, Regenerate (Delete kept away from the thumb).
                                 add(MenuItem("Delete", Icons.Filled.Delete) {
                                     selectedId = null
                                     // Deleting the last reply also takes back the message of yours
@@ -201,6 +197,12 @@ fun RoleplayChatScreen(id: String) {
                                     val gone = setOfNotNull(m.id, prev?.id)
                                     scope.launch { store.updateRoleplay(id) { r -> r.copy(messages = r.messages.filter { it.id !in gone }) } }
                                 })
+                                add(MenuItem("Edit", Icons.Filled.Edit) { selectedId = null; editing = m.id; editText = m.text })
+                                if (!m.isUser && isLast) {
+                                    // Long-press: no stopping early (end-of-turn ignored, length capped).
+                                    add(MenuItem("Continue", Icons.Filled.PlayArrow, onLongClick = { selectedId = null; app.engine.continueRoleplay(id, m.id, ignoreEos = true) }) { selectedId = null; app.engine.continueRoleplay(id, m.id) })
+                                    add(MenuItem("Regenerate", Icons.Filled.Refresh, onLongClick = { selectedId = null; app.engine.regenerateRoleplay(id, m.id, ignoreEos = true) }) { selectedId = null; app.engine.regenerateRoleplay(id, m.id) })
+                                }
                             }
                             if (m.attachments.any { it.description.isBlank() }) add(MenuItem("Describe images", Icons.Filled.ImageSearch) {
                                 selectedId = null
@@ -241,7 +243,8 @@ fun RoleplayChatScreen(id: String) {
                         MenuItem("Generate image...") { nav.navigate(Routes.section(MediaKind.IMAGE, owner)) },
                         MenuItem("Generate video...") { nav.navigate(Routes.section(MediaKind.VIDEO, owner)) },
                     ),
-                    busy = busy,
+                    // Send turns into Stop while a reply or Impersonate is being written.
+                    busy = busy || "impersonate:$id" in tasks,
                     onSend = {
                         val text = input
                         val atts = attachments.toList()
@@ -249,7 +252,7 @@ fun RoleplayChatScreen(id: String) {
                         attachments.clear()
                         app.engine.sendRoleplay(id, text, atts, speaker)
                     },
-                    onStop = { app.engine.stop(id) },
+                    onStop = { app.engine.stop(id); app.tasks.cancel("impersonate:$id") },
                     usage = rp.usage,
                     buttons = {
                         // Impersonate: the LLM writes your next line (continuing anything typed).

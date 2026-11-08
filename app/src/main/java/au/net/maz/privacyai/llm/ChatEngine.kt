@@ -63,16 +63,20 @@ class ChatEngine(private val app: PrivacyApp) {
     }
 
     /** A new version of a reply (the old ones are kept and can be switched between). */
-    fun regenerateUtility(chatId: String, messageId: String) {
-        app.tasks.launch(replyTaskId(chatId)) { replyUtility(chatId, Mode.REGENERATE, messageId) }
+    fun regenerateUtility(chatId: String, messageId: String, ignoreEos: Boolean = false) {
+        app.tasks.launch(replyTaskId(chatId)) { replyUtility(chatId, Mode.REGENERATE, messageId, ignoreEos) }
     }
 
     /** Carry on writing a reply from where it stopped. */
-    fun continueUtility(chatId: String, messageId: String) {
-        app.tasks.launch(replyTaskId(chatId)) { replyUtility(chatId, Mode.CONTINUE, messageId) }
+    fun continueUtility(chatId: String, messageId: String, ignoreEos: Boolean = false) {
+        app.tasks.launch(replyTaskId(chatId)) { replyUtility(chatId, Mode.CONTINUE, messageId, ignoreEos) }
     }
 
-    private suspend fun replyUtility(chatId: String, mode: Mode, targetId: String?) {
+    /**
+     * [ignoreEos] (long-press): the model's end-of-turn token is ignored, so only a stop
+     * string or the [CONTINUE_TOKENS] cap ends it (the old app's long-press).
+     */
+    private suspend fun replyUtility(chatId: String, mode: Mode, targetId: String?, ignoreEos: Boolean = false) {
         val s = store.settings()
         val chat = store.chat(chatId) ?: return
         val character = s.chatCharacterId?.let { store.character(it) }
@@ -92,7 +96,7 @@ class ChatEngine(private val app: PrivacyApp) {
             addAll(history)
         }
         val request = Prompts.request(model, messages, preset)
-            .let { if (mode == Mode.CONTINUE) it.copy(maxTokens = CONTINUE_TOKENS) else it }
+            .let { if (mode == Mode.CONTINUE || ignoreEos) it.copy(maxTokens = CONTINUE_TOKENS, ignoreEos = ignoreEos) else it }
 
         val (replyId, base) = when (mode) {
             Mode.NEW -> Message(speaker = Message.ASSISTANT, pending = true).let { m ->
@@ -142,15 +146,16 @@ class ChatEngine(private val app: PrivacyApp) {
     }
 
     /** A new version of a character's message, from the same character. */
-    fun regenerateRoleplay(rpId: String, messageId: String) {
-        app.tasks.launch(replyTaskId(rpId)) { replyRoleplay(rpId, Mode.REGENERATE, messageId, null) }
+    fun regenerateRoleplay(rpId: String, messageId: String, ignoreEos: Boolean = false) {
+        app.tasks.launch(replyTaskId(rpId)) { replyRoleplay(rpId, Mode.REGENERATE, messageId, null, ignoreEos) }
     }
 
-    fun continueRoleplay(rpId: String, messageId: String) {
-        app.tasks.launch(replyTaskId(rpId)) { replyRoleplay(rpId, Mode.CONTINUE, messageId, null) }
+    fun continueRoleplay(rpId: String, messageId: String, ignoreEos: Boolean = false) {
+        app.tasks.launch(replyTaskId(rpId)) { replyRoleplay(rpId, Mode.CONTINUE, messageId, null, ignoreEos) }
     }
 
-    private suspend fun replyRoleplay(rpId: String, mode: Mode, targetId: String?, speakerId: String?) {
+    /** [ignoreEos]: as for [replyUtility]. */
+    private suspend fun replyRoleplay(rpId: String, mode: Mode, targetId: String?, speakerId: String?, ignoreEos: Boolean = false) {
         val s = store.settings()
         val rp = store.roleplay(rpId) ?: return
         val model = rp.model.ifBlank { defaultModel() }
@@ -173,7 +178,7 @@ class ChatEngine(private val app: PrivacyApp) {
             if (m.isUser) stripThink(m.text) else Prompts.assistantText(rp, m)
         }
         val request = Prompts.roleplayReply(rp.copy(model = model), history, forced, preset)
-            .let { if (mode == Mode.CONTINUE) it.copy(maxTokens = CONTINUE_TOKENS) else it }
+            .let { if (mode == Mode.CONTINUE || ignoreEos) it.copy(maxTokens = CONTINUE_TOKENS, ignoreEos = ignoreEos) else it }
 
         val replyId: String
         var base = ""

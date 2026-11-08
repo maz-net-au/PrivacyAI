@@ -145,9 +145,8 @@ fun ChatScreen(routeId: String) {
     val messages = chat?.messages.orEmpty()
 
     LaunchedEffect(Unit) { app.engine.clearStalePending(id, isRoleplay = false) }
-    LaunchedEffect(messages.size, messages.lastOrNull()?.text?.length) {
-        if (messages.isNotEmpty()) listState.animateScrollToItem(messages.size - 1)
-    }
+    // Show the newest text as it's written.
+    FollowNewest(listState, messages.size, messages.lastOrNull()?.text?.length ?: 0)
     // A new chat that was never sent: drop any photos picked for it when the screen closes.
     screenState("cleanup") { OnCleared { app.appScope.launch { runCatching { if (store.chat(id) == null) store.deleteMediaOwnedBy(owner) } } } }
 
@@ -178,6 +177,7 @@ fun ChatScreen(routeId: String) {
                         isUser = m.isUser,
                         background = if (m.isUser) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
                         textColour = if (m.isUser) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                        nameColour = MaterialTheme.colorScheme.primary, // also the *italics* colour
                         attachments = m.attachments.map { it.mediaId },
                         pending = m.pending,
                         error = m.error,
@@ -186,10 +186,7 @@ fun ChatScreen(routeId: String) {
                         onSelect = { selectedId = if (selectedId == m.id) null else m.id },
                         onCopy = { copyText(context, stripThink(m.text)) },
                         actions = buildList {
-                            if (!m.isUser && isLast && !busy) {
-                                add(MenuItem("Continue", Icons.Filled.PlayArrow) { selectedId = null; app.engine.continueUtility(id, m.id) })
-                                add(MenuItem("Regenerate", Icons.Filled.Refresh) { selectedId = null; app.engine.regenerateUtility(id, m.id) })
-                            }
+                            // Left to right: Delete, Continue, Regenerate (Delete kept away from the thumb).
                             if (!busy) add(MenuItem("Delete", Icons.Filled.Delete) {
                                 selectedId = null
                                 // Deleting the last reply also takes back the message of yours
@@ -205,6 +202,11 @@ fun ChatScreen(routeId: String) {
                                 val gone = setOfNotNull(m.id, prev?.id)
                                 scope.launch { store.updateChat(id) { c -> c.copy(messages = c.messages.filter { it.id !in gone }) } }
                             })
+                            if (!m.isUser && isLast && !busy) {
+                                // Long-press: no stopping early (end-of-turn ignored, length capped).
+                                add(MenuItem("Continue", Icons.Filled.PlayArrow, onLongClick = { selectedId = null; app.engine.continueUtility(id, m.id, ignoreEos = true) }) { selectedId = null; app.engine.continueUtility(id, m.id) })
+                                add(MenuItem("Regenerate", Icons.Filled.Refresh, onLongClick = { selectedId = null; app.engine.regenerateUtility(id, m.id, ignoreEos = true) }) { selectedId = null; app.engine.regenerateUtility(id, m.id) })
+                            }
                         },
                     )
                 }

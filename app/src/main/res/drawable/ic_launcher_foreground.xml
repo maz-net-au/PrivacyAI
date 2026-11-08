@@ -1,8 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Adaptive-icon foreground: the old app's chip glyph with a padlock in place of the
+     centre square, drawn white within the 108dp adaptive canvas safe zone. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp" android:height="108dp"
-    android:viewportWidth="108" android:viewportHeight="108">
-    <path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" android:strokeWidth="6"
-        android:pathData="M54,30 a24,24 0 1,1 -0.01,0 z" />
-    <path android:fillColor="#FFFFFFFF"
-        android:pathData="M46,50 h16 v14 h-16 z M49,50 v-4 a5,5 0 0,1 10,0 v4 h-3 v-4 a2,2 0 0,0 -4,0 v4 z" />
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group android:translateX="24" android:translateY="24" android:scaleX="2.5" android:scaleY="2.5">
+        <!-- Chip outline and pins. -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M21,11L21,9L19,9L19,7C19,5.9 18.1,5 17,5L15,5L15,3L13,3L13,5L11,5L11,3L9,3L9,5L7,5C5.9,5 5,5.9 5,7L5,9L3,9L3,11L5,11L5,13L3,13L3,15L5,15L5,17C5,18.1 5.9,19 7,19L9,19L9,21L11,21L11,19L13,19L13,21L15,21L15,19L17,19C18.1,19 19,18.1 19,17L19,15L21,15L21,13L19,13L19,11L21,11ZM17,17L7,17L7,7L17,7L17,17Z" />
+        <!-- Padlock: shackle, then body with a keyhole cut out. -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M10,11.5L10,10A2,2 0 0,1 14,10L14,11.5L13,11.5L13,10A1,1 0 0,0 11,10L11,11.5Z" />
+        <path
+            android:fillColor="#FFFFFF"
+            android:fillType="evenOdd"
+            android:pathData="M9,11.5L15,11.5L15,15.8L9,15.8ZM11.6,14.9L11.6,13.7A0.7,0.7 0 1,1 12.4,13.7L12.4,14.9Z" />
+    </group>
 </vector>

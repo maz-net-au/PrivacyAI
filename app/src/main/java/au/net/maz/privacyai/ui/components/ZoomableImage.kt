@@ -36,7 +36,13 @@ import coil.compose.AsyncImage
  * pans are consumed here.
  */
 @Composable
-fun ZoomableImage(model: Any?, contentDescription: String?, modifier: Modifier = Modifier) {
+fun ZoomableImage(
+    model: Any?,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    /** Called with the image's width / height once it has loaded. */
+    onAspect: (Float) -> Unit = {},
+) {
     var scale by remember { mutableStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var boxSize by remember { mutableStateOf(IntSize.Zero) }
@@ -86,6 +92,10 @@ fun ZoomableImage(model: Any?, contentDescription: String?, modifier: Modifier =
             model = model,
             contentDescription = contentDescription,
             contentScale = ContentScale.Fit,
+            onSuccess = { s ->
+                val size = s.painter.intrinsicSize
+                if (size.width > 0f && size.height > 0f) onAspect(size.width / size.height)
+            },
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {

@@ -1,5 +1,6 @@
 package au.net.maz.privacyai.ui.generate
 
+import au.net.maz.privacyai.data.model.Character
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,12 +37,13 @@ import kotlinx.coroutines.CancellationException
 
 /**
  * Writing an image prompt with the LLM: a screen of its own (not a small popup).
- * The focus says what the image should be about; the roleplay (if any) is the context.
+ * The focus says what the image should be about. The context is the character when
+ * generating a character's image ([ctx]), otherwise the roleplay (if any).
  * The result can be edited, and refined with a change request. The model defaults to
  * the roleplay's model, since switching models takes time.
  */
 @Composable
-fun FocusScreen(owner: String, resultKey: String) {
+fun FocusScreen(owner: String, resultKey: String, ctx: String) {
     val app = LocalApp.current
     val store = LocalStore.current
     val nav = LocalNav.current
@@ -50,6 +52,9 @@ fun FocusScreen(owner: String, resultKey: String) {
 
     var loaded by kept("loaded") { false }
     var rp by kept<Roleplay?>("rp") { null }
+    // A character being given an image: the only context (the roleplay just picks the model).
+    val character by kept<Character?>("character") { ctx.ifBlank { null }?.let { app.results.peek<Character>(it) } }
+    val contextRp = if (character != null) null else rp
     var model by kept<String?>("model") { null }
     var focus by kept("focus") { "" }
     var prompt by kept("prompt") { "" }
@@ -88,7 +93,8 @@ fun FocusScreen(owner: String, resultKey: String) {
             Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 if (!loaded) return@Column
                 Text(
-                    rp?.let { "Context: roleplay \"${it.title.ifBlank { "Untitled" }}\" (background, characters and the conversation)" }
+                    character?.let { "Context: character \"${it.name.ifBlank { "Unnamed" }}\" (everything filled in on its page)" }
+                        ?: rp?.let { "Context: roleplay \"${it.title.ifBlank { "Untitled" }}\" (background, characters and the conversation)" }
                         ?: "No conversation context: the prompt is written from the focus alone.",
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -98,9 +104,10 @@ fun FocusScreen(owner: String, resultKey: String) {
                     value = focus, onValueChange = { focus = it }, minLines = 3,
                     generating = writeTask in tasks,
                     onGenerate = { _ ->
-                        val r = rp
+                        val r = contextRp
+                        val ch = character
                         val f = focus
-                        run(writeTask) { m, system -> Prompts.imagePrompt(r, f, m, system) }
+                        run(writeTask) { m, system -> Prompts.imagePrompt(r, f, m, system, ch) }
                     },
                     onStop = { app.tasks.cancel(writeTask) },
                     generateLabel = "Write prompt",
@@ -114,10 +121,11 @@ fun FocusScreen(owner: String, resultKey: String) {
                     value = change, onValueChange = { change = it }, minLines = 2,
                     generating = refineTask in tasks,
                     onGenerate = { _ ->
-                        val r = rp
+                        val r = contextRp
+                        val chr = character
                         val cur = prompt
                         val ch = change
-                        run(refineTask) { m, system -> Prompts.refinePrompt(r, cur, ch, m, system) }
+                        run(refineTask) { m, system -> Prompts.refinePrompt(r, cur, ch, m, system, chr) }
                     },
                     onStop = { app.tasks.cancel(refineTask) },
                     generateLabel = "Refine",

@@ -247,7 +247,13 @@ fun ViewerScreen(id: String, owner: String, kind: MediaKind?) {
                     }
                 } else {
                     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                        MediaFull(item, Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 560.dp))
+                        // Images: full width, as tall as their shape needs (capped at square).
+                        MediaFull(
+                            item,
+                            if (item.kind == MediaKind.IMAGE) Modifier.fillMaxWidth()
+                            else Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 560.dp),
+                            fitWidth = true,
+                        )
                         Column(Modifier.padding(12.dp)) { details() }
                     }
                 }

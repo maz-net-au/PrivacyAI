@@ -1,5 +1,6 @@
 package au.net.maz.privacyai.ui.characters
 
+import au.net.maz.privacyai.ui.components.DiscardDialog
 import au.net.maz.privacyai.ui.components.PrivateText
 import androidx.compose.material3.OutlinedTextField
 import kotlinx.coroutines.withContext
@@ -211,7 +212,9 @@ fun CharacterEditScreen(owner: String, routeId: String) {
     var rp by kept<Roleplay?>("rp") { null }
     val pickKey by kept("pickKey") { Routes.newResultKey() }
     var picker by remember { mutableStateOf(false) }
-    var genError by remember { mutableStateOf<String?>(null) }
+    // (field, message) of the last failed Generate, shown under that field.
+    var genError by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var confirmDiscard by remember { mutableStateOf(false) }
     val tasks by app.tasks.ids.collectAsState()
 
     LaunchedEffect(Unit) {
@@ -248,13 +251,22 @@ fun CharacterEditScreen(owner: String, routeId: String) {
         }
     }
 
+    val genFields = listOf("greeting", "persona", "state")
+    fun leave() {
+        genFields.forEach { app.tasks.cancel("gen:${c.id}:$it") }
+        nav.popBackStack()
+    }
+
+    // Back never saves (only Save does); it asks first if anything changed.
     fun back() {
         val ch = c
-        val empty = ch.name.isBlank() && ch.systemPrompt.isBlank() && ch.description.isBlank()
-        if (routeId == "new" && empty) nav.popBackStack()
-        else scope.launch { save(); nav.popBackStack() }
+        val changed = original?.let { it != ch }
+            ?: (ch.name.isNotBlank() || ch.description.isNotBlank() || ch.greeting.isNotBlank() ||
+                ch.systemPrompt.isNotBlank() || ch.state.isNotBlank() || ch.referenceImage != null)
+        if (changed) confirmDiscard = true else leave()
     }
     BackHandler { back() }
+    if (confirmDiscard) DiscardDialog(onDiscard = { confirmDiscard = false; leave() }, onKeep = { confirmDiscard = false })
 
     fun gen(field: String, hint: String) {
         genError = null
@@ -275,7 +287,7 @@ fun CharacterEditScreen(owner: String, routeId: String) {
                     else -> c.copy(state = t)
                 }
             },
-            onDone = { e -> if (e != null && e !is CancellationException) genError = e.message },
+            onDone = { e -> if (e != null && e !is CancellationException) genError = field to (e.message ?: "Generate failed") },
         )
     }
 
@@ -287,6 +299,7 @@ fun CharacterEditScreen(owner: String, routeId: String) {
         onStop = { app.tasks.cancel("gen:${c.id}:$key") },
         generateLabel = if (key == "state" && value.isNotBlank()) "Update" else "Generate",
         guidanceInDialog = true,
+        error = genError?.takeIf { it.first == key }?.second,
     )
 
     AppScaffold(title = if (routeId == "new") "New character" else c.name.ifBlank { "Character" }, onBack = ::back) { pad ->
@@ -318,11 +331,10 @@ fun CharacterEditScreen(owner: String, routeId: String) {
                                 }
                             }
                             OutlinedButton(onClick = {
-                                // Save what's there first, so the image-prompt writer can see the character.
-                                scope.launch {
-                                    if (inRoleplay) save()
-                                    nav.navigate(Routes.section(MediaKind.IMAGE, mediaOwner, pickKey))
-                                }
+                                // The prompt writer uses the character as it is now (unsaved edits
+                                // included) as its context, in memory only. Nothing is saved.
+                                app.results.put(Routes.characterContextKey(pickKey), c)
+                                nav.navigate(Routes.section(MediaKind.IMAGE, mediaOwner, pickKey))
                             }) { Text("Generate") }
                         }
                     }
@@ -349,7 +361,6 @@ fun CharacterEditScreen(owner: String, routeId: String) {
                 field("Greeting", "greeting", c.greeting, { c = c.copy(greeting = it) })
                 field("Persona / system prompt", "persona", c.systemPrompt, { c = c.copy(systemPrompt = it) }, lines = 5)
                 field("State", "state", c.state, { c = c.copy(state = it) })
-                genError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 Button(onClick = { scope.launch { save(); nav.popBackStack() } }, modifier = Modifier.fillMaxWidth()) { Text("Save") }
             }
         }

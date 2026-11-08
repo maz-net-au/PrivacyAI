@@ -1,5 +1,6 @@
 package au.net.maz.privacyai.ui.roleplay
 
+import au.net.maz.privacyai.ui.components.DiscardDialog
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -182,7 +183,9 @@ fun RoleplaySetupScreen(routeId: String) {
     var imagesSent by kept("imagesSent") { "3" }
     val overrides = screenState("overrides") { mutableStateMapOf<SamplingParam, String>() }
     var showOverrides by remember { mutableStateOf(false) }
-    var genError by remember { mutableStateOf<String?>(null) }
+    // (field, message) of the last failed Generate, shown under that field.
+    var genError by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var confirmDiscard by remember { mutableStateOf(false) }
     val current = rp ?: return
     if (!loaded) {
         title = current.title; yourName = current.yourName; myDescription = current.myDescription
@@ -213,13 +216,21 @@ fun RoleplaySetupScreen(routeId: String) {
         after()
     }
 
+    fun leave() {
+        listOf("mydescription", "summary").forEach { app.tasks.cancel("gen:$id:$it") }
+        // A new roleplay that was never started is thrown away.
+        if (isNew) app.appScope.launch { store.deleteRoleplay(id) }
+        nav.popBackStack()
+    }
+
+    // Back never saves (only the button does); it asks first if anything changed.
     fun back() {
-        if (isNew) {
-            app.appScope.launch { store.deleteRoleplay(id) }
-            nav.popBackStack()
-        } else save { nav.popBackStack() }
+        val changed = withFields(current).copy(updatedAt = current.updatedAt) != current ||
+            (isNew && current.characters.isNotEmpty())
+        if (changed) confirmDiscard = true else leave()
     }
     BackHandler { back() }
+    if (confirmDiscard) DiscardDialog(onDiscard = { confirmDiscard = false; leave() }, onKeep = { confirmDiscard = false })
 
     fun gen(field: String, hint: String) {
         genError = null
@@ -232,7 +243,7 @@ fun RoleplaySetupScreen(routeId: String) {
                 if (field == "summary") Prompts.summary(snapshot, use, hint) else Prompts.myDescription(snapshot, use, hint)
             },
             onText = { t -> if (field == "summary") summary = t else myDescription = t },
-            onDone = { e -> if (e != null && e !is kotlinx.coroutines.CancellationException) genError = e.message },
+            onDone = { e -> if (e != null && e !is kotlinx.coroutines.CancellationException) genError = field to (e.message ?: "Generate failed") },
         )
     }
 
@@ -248,13 +259,14 @@ fun RoleplaySetupScreen(routeId: String) {
                     label = "My description", value = myDescription, onValueChange = { myDescription = it },
                     generating = "gen:$id:mydescription" in tasks,
                     onGenerate = { gen("mydescription", it) }, onStop = { app.tasks.cancel("gen:$id:mydescription") },
+                    error = genError?.takeIf { it.first == "mydescription" }?.second,
                     guidanceInDialog = true,
                 )
                 GenerateField(
                     label = "Summary / background", value = summary, onValueChange = { summary = it },
                     generating = "gen:$id:summary" in tasks, generateLabel = "Generate from conversation",
                     onGenerate = { gen("summary", it) }, onStop = { app.tasks.cancel("gen:$id:summary") },
-                    error = genError,
+                    error = genError?.takeIf { it.first == "summary" }?.second,
                     guidanceInDialog = true,
                 )
 

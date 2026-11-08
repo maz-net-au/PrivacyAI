@@ -23,6 +23,12 @@ class Results {
         return out
     }
 
+    /** Read a value without removing it (for context several screens use). */
+    @Suppress("UNCHECKED_CAST")
+    fun <T> peek(key: String): T? = _values.value[key] as? T
+
+    fun remove(key: String) = _values.update { it - key }
+
     fun clear() {
         _values.value = emptyMap()
     }

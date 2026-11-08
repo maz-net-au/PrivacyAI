@@ -136,6 +136,18 @@ private fun GuidanceDialog(title: String, help: String, onDismiss: () -> Unit, o
     )
 }
 
+/** "Discard changes?" when leaving an edit screen with Back. Only Save saves. */
+@Composable
+fun DiscardDialog(onDiscard: () -> Unit, onKeep: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onKeep,
+        title = { Text("Discard changes?") },
+        text = { Text("Your changes haven't been saved.") },
+        confirmButton = { TextButton(onClick = onDiscard) { Text("Discard") } },
+        dismissButton = { TextButton(onClick = onKeep) { Text("Keep editing") } },
+    )
+}
+
 /** A dropdown for picking one of [options]. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

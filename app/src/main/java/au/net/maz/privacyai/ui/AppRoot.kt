@@ -67,7 +67,7 @@ object Routes {
     const val CHARACTER_IMPORT = "character-import/{rp}"
     const val SECTION = "section/{section}?owner={owner}&result={result}"
     const val FORM = "form/{workflow}?owner={owner}&from={from}&result={result}&popTo={popTo}"
-    const val FOCUS = "focus?owner={owner}&result={result}"
+    const val FOCUS = "focus?owner={owner}&result={result}&ctx={ctx}"
     const val GALLERY = "gallery/{owner}?result={result}"
     const val VIEWER = "viewer/{id}?owner={owner}&kind={kind}"
     const val INPUT_PICKER = "input/{kind}?owner={owner}&result={result}"
@@ -84,7 +84,11 @@ object Routes {
         "section/${section.key}?owner=${e(owner)}&result=${e(result)}"
     fun form(workflow: String, owner: String, from: String = "", result: String = "", popTo: String = "") =
         "form/${e(workflow)}?owner=${e(owner)}&from=${e(from)}&result=${e(result)}&popTo=${e(popTo)}"
-    fun focus(owner: String, result: String) = "focus?owner=${e(owner)}&result=${e(result)}"
+    /** [ctx]: a Results key holding a Character to use as the context instead of the roleplay. */
+    fun focus(owner: String, result: String, ctx: String = "") = "focus?owner=${e(owner)}&result=${e(result)}&ctx=${e(ctx)}"
+
+    /** Results key for the character a reference image is being generated for. */
+    fun characterContextKey(resultKey: String) = "charctx:$resultKey"
     /** A media grid. With [result], tapping an item picks it. */
     fun gallery(owner: String, result: String = "") = "gallery/${e(owner)}?result=${e(result)}"
     /**
@@ -152,8 +156,8 @@ private fun MainNav() {
                     popTo = it.arg("popTo"),
                 )
             }
-            composable(Routes.FOCUS, listOf(str("owner"), str("result"))) {
-                FocusScreen(it.arg("owner"), it.arg("result"))
+            composable(Routes.FOCUS, listOf(str("owner"), str("result"), str("ctx"))) {
+                FocusScreen(it.arg("owner"), it.arg("result"), it.arg("ctx"))
             }
             composable(Routes.GALLERY, listOf(str("owner"), str("result"))) {
                 MediaGridScreen(it.arg("owner").ifBlank { MediaOwner.GALLERY }, it.arg("result"))

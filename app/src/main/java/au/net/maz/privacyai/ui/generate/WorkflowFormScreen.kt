@@ -1,5 +1,6 @@
 package au.net.maz.privacyai.ui.generate
 
+import au.net.maz.privacyai.data.model.Character
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -245,7 +246,7 @@ fun WorkflowFormScreen(workflowId: String, owner: String, fromMediaId: String, r
                 }
                 if (roleplayId != null) Text("Context: roleplay \"${rpTitle.ifBlank { "Untitled" }}\"", style = MaterialTheme.typography.bodySmall)
                 form.description?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-                form.fields.forEachIndexed { i, f -> FieldControl(f, i, owner, keyBase) }
+                form.fields.forEachIndexed { i, f -> FieldControl(f, i, owner, keyBase, resultKey) }
                 form.submitError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 Button(onClick = ::generate, enabled = !form.submitting, modifier = Modifier.fillMaxWidth()) {
                     Text(if (form.submitting) "Starting..." else "Generate")
@@ -265,7 +266,7 @@ private fun promptOf(fields: List<FieldState>): String {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun FieldControl(f: FieldState, index: Int, owner: String, keyBase: String) {
+private fun FieldControl(f: FieldState, index: Int, owner: String, keyBase: String, resultKey: String) {
     val app = LocalApp.current
     val store = LocalStore.current
     val nav = LocalNav.current
@@ -279,11 +280,21 @@ private fun FieldControl(f: FieldState, index: Int, owner: String, keyBase: Stri
                 keyboardOptions = PrivateText, modifier = Modifier.fillMaxWidth(),
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                // Generating a character's image: the character is the context (even in a roleplay).
+                val charCtx = Routes.characterContextKey(resultKey).takeIf {
+                    resultKey.isNotBlank() && app.results.peek<Character>(it) != null
+                }
                 TextButton(onClick = {
                     val key = "$keyBase:p$index"
                     app.results.put("init:$key", f.value)
-                    nav.navigate(Routes.focus(owner, key))
-                }) { Text(if (MediaOwner.roleplayId(owner) != null) "From context" else "Write with LLM") }
+                    nav.navigate(Routes.focus(owner, key, ctx = charCtx.orEmpty()))
+                }) {
+                    Text(when {
+                        charCtx != null -> "From character"
+                        MediaOwner.roleplayId(owner) != null -> "From context"
+                        else -> "Write with LLM"
+                    })
+                }
             }
         }
         FieldType.INT, FieldType.FLOAT -> OutlinedTextField(

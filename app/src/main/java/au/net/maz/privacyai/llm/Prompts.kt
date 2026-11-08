@@ -137,24 +137,30 @@ object Prompts {
      * Ask the LLM for an image prompt. Same contents as the old app: the story background,
      * every message, then the focus. Without a roleplay, just the focus.
      */
-    fun imagePrompt(rp: Roleplay?, focus: String, model: String, system: String): ChatRequest {
+    fun imagePrompt(rp: Roleplay?, focus: String, model: String, system: String, character: Character? = null): ChatRequest {
         val user = buildString {
-            if (rp != null) {
+            if (character != null) {
+                appendLine("## The character"); appendLine(characterSheet(character)); appendLine()
+                appendLine("This image is a reference image of this character: show their appearance clearly.")
+            } else if (rp != null) {
                 roleplayBackground(rp).takeIf { it.isNotBlank() }?.let { appendLine(it); appendLine() }
                 appendLine("## Recent messages")
                 appendLine(transcript(rp))
                 appendLine()
             }
-            appendLine("Focus for the image: ${focus.ifBlank { "the current scene" }}")
+            val defaultFocus = if (character != null) "the character, clearly showing their appearance" else "the current scene"
+            appendLine("Focus for the image: ${focus.ifBlank { defaultFocus }}")
             append("Describe the single image now, leading with the focus above.")
         }
         return fixed(model, system, user)
     }
 
     /** New: rewrite an existing prompt with a change request. */
-    fun refinePrompt(rp: Roleplay?, current: String, change: String, model: String, system: String): ChatRequest {
+    fun refinePrompt(rp: Roleplay?, current: String, change: String, model: String, system: String, character: Character? = null): ChatRequest {
         val user = buildString {
-            if (rp != null) {
+            if (character != null) {
+                appendLine("## The character"); appendLine(characterSheet(character)); appendLine()
+            } else if (rp != null) {
                 roleplayBackground(rp).takeIf { it.isNotBlank() }?.let { appendLine(it); appendLine() }
                 appendLine("## Recent messages")
                 appendLine(transcript(rp))
@@ -168,6 +174,15 @@ object Prompts {
         }
         return fixed(model, system, user)
     }
+
+    /** Every filled-in field of a character, for use as context. */
+    fun characterSheet(c: Character): String = buildString {
+        if (c.name.isNotBlank()) appendLine("Name: ${c.name}")
+        if (c.description.isNotBlank()) appendLine("Short description: ${c.description}")
+        if (c.systemPrompt.isNotBlank()) appendLine("Persona: ${c.systemPrompt}")
+        if (c.greeting.isNotBlank()) appendLine("Greeting: ${c.greeting}")
+        if (c.state.isNotBlank()) appendLine("Current state: ${c.state}")
+    }.trim()
 
     // ---- text fields with a Generate option ---------------------------------------------
 

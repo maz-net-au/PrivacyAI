@@ -79,7 +79,12 @@ fun MediaThumb(media: Media?, modifier: Modifier = Modifier) {
 
 /** Full view of a media item: zoomable image, or a player for video/audio. */
 @Composable
-fun MediaFull(media: Media, modifier: Modifier = Modifier) {
+/**
+ * [fitWidth]: for images, size the box to the image instead of the box's own height:
+ * full width, height from the image's shape, but no taller than it is wide (so tall
+ * images get space at the sides instead).
+ */
+fun MediaFull(media: Media, modifier: Modifier = Modifier, fitWidth: Boolean = false) {
     val fileId = media.fileId
     when {
         media.status == MediaStatus.PENDING -> Box(modifier, contentAlignment = Alignment.Center) {
@@ -87,6 +92,10 @@ fun MediaFull(media: Media, modifier: Modifier = Modifier) {
         }
         fileId == null -> Box(modifier, contentAlignment = Alignment.Center) {
             Text(media.info.error ?: "Failed", color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(24.dp))
+        }
+        media.kind == MediaKind.IMAGE && fitWidth -> {
+            var aspect by remember(fileId) { mutableFloatStateOf(1f) }
+            ZoomableImage(MediaRef(fileId), null, modifier.aspectRatio(maxOf(aspect, 1f)), onAspect = { aspect = it })
         }
         media.kind == MediaKind.IMAGE -> ZoomableImage(MediaRef(fileId), null, modifier)
         else -> EncryptedPlayer(fileId, video = media.kind == MediaKind.VIDEO, modifier = modifier)

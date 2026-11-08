@@ -277,12 +277,20 @@ class ChatEngine(private val app: PrivacyApp) {
             val address = store.settings().llmAddress
             require(address.isNotBlank()) { "No LLM server address is set (Settings)" }
             val sb = StringBuilder()
+            // Only real text is passed on, so whatever was there stays until the answer
+            // starts (not while the model is still reasoning), and survives an empty result.
             app.llama.streamChat(address, req.copy(model = req.model.ifBlank { defaultModel() })).collect {
                 sb.append(it)
-                onText(stripThink(sb.toString()))
+                stripThink(sb.toString()).takeIf { t -> t.isNotBlank() }?.let(onText)
             }
-            onText(stripThink(sb.toString()).trim())
-            onDone(null)
+            val answer = stripThink(sb.toString()).trim()
+            when {
+                answer.isNotEmpty() -> { onText(answer); onDone(null) }
+                sb.isNotBlank() -> onDone(IllegalStateException(
+                    "The model only produced reasoning, no answer (it may have run out of tokens). Nothing was changed.",
+                ))
+                else -> onDone(IllegalStateException("The model returned no text. Nothing was changed."))
+            }
         } catch (c: CancellationException) {
             onDone(c)
             throw c

@@ -1,0 +1,169 @@
+<mxfile host="drawio">
+  <diagram id="flow" name="Screen flow">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <mxCell id="start" value="App start" style="ellipse;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="40" y="170" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="dbExists" value="Database exists?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="220" y="150" width="140" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="createDb" value="Create database&lt;br&gt;(optional PIN)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="440" y="40" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="pinSet" value="PIN set?" style="rhombus;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="450" y="270" width="140" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="pinEntry" value="PIN entry" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="700" y="285" width="160" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="home" value="Home / navigation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="980" y="150" width="160" height="70" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="start" target="dbExists">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="dbExists" target="createDb">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="dbExists" target="pinSet">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" value="Database created" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="createDb" target="home">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" value="Yes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="pinSet" target="pinEntry">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" value="No" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=1;" edge="1" parent="1" source="pinSet" target="home">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="520" y="540" />
+              <mxPoint x="1060" y="540" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e7" value="Correct PIN" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=1;exitY=0.25;entryX=0.25;entryY=1;" edge="1" parent="1" source="pinEntry" target="home">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" value="Wrong PIN&lt;br&gt;(try again)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0.25;exitY=1;entryX=0.75;entryY=1;" edge="1" parent="1" source="pinEntry" target="pinEntry">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="740" y="400" />
+              <mxPoint x="820" y="400" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e9" value="Inactivity auto-lock&lt;br&gt;(from any screen)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;exitX=0.75;exitY=1;entryX=1;entryY=0.75;" edge="1" parent="1" source="home" target="pinEntry">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="statusMenu" value="Status / global menu&lt;br&gt;(popup: LLM + image generator status)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="960" y="-110" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="settings" value="Settings" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1260" y="-110" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="s1" value="Tap status dot" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0.5;exitY=0;entryX=0.5;entryY=1;" edge="1" parent="1" source="home" target="statusMenu">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="s2" value="Settings button" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="statusMenu" target="settings">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="s3" value="Lock button&lt;br&gt;(hidden if no PIN set)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;exitX=0;exitY=0.5;entryX=0.5;entryY=0;" edge="1" parent="1" source="statusMenu" target="pinEntry">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="chat" value="Chat:&lt;br&gt;list of utility chats&lt;br&gt;(long-press to delete)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1260" y="0" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="roleplay" value="Roleplay:&lt;br&gt;list of roleplays" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1260" y="90" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="genImage" value="Generate image" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1260" y="180" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="genAudio" value="Generate audio" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1260" y="270" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="genVideo" value="Generate video" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1260" y="360" width="160" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="gallery" value="Gallery" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1260" y="450" width="160" height="60" as="geometry" />
+        </mxCell>
+
+        <mxCell id="h1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=1;exitY=0.5;" edge="1" parent="1" source="home" target="chat">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="h2" value="only if enabled&lt;br&gt;in Settings" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=1;exitY=0.5;dashed=1;" edge="1" parent="1" source="home" target="roleplay">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="h3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=1;exitY=0.5;" edge="1" parent="1" source="home" target="genImage">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="h4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=1;exitY=0.5;" edge="1" parent="1" source="home" target="genAudio">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="h5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=1;exitY=0.5;" edge="1" parent="1" source="home" target="genVideo">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="h6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=1;exitY=0.5;" edge="1" parent="1" source="home" target="gallery">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="importConv" value="Import conversation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1540" y="50" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="manageChars" value="Manage characters&lt;br&gt;(main list; same screens as&lt;br&gt;character management in setup)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1540" y="140" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="r1" value="Hamburger menu" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=1;exitY=0.5;" edge="1" parent="1" source="roleplay" target="importConv">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="r2" value="Hamburger menu" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=1;exitY=0.5;" edge="1" parent="1" source="roleplay" target="manageChars">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <mxCell id="utilityChat" value="Utility chat" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1540" y="-40" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="roleplaySetup" value="Roleplay setup&lt;br&gt;(old: Screenshot_20261107-021030, needs work)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1540" y="250" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="roleplayChat" value="Roleplay chat" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
+          <mxGeometry x="1820" y="250" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="u1" value="+ button (new chat)&lt;br&gt;or tap existing (resumes where left off)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=1;exitY=0.5;" edge="1" parent="1" source="chat" target="utilityChat">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="r3" value="+ button" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=1;exitY=0.5;" edge="1" parent="1" source="roleplay" target="roleplaySetup">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="r5" value="setup done" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;" edge="1" parent="1" source="roleplaySetup" target="roleplayChat">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="r6" value="Tap existing roleplay&lt;br&gt;(resumes where left off)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=1;" edge="1" parent="1" source="roleplay" target="roleplayChat">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1340" y="370" />
+              <mxPoint x="1920" y="370" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="r7" value="Hamburger menu:&lt;br&gt;Edit chat details" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;exitX=0.5;exitY=1;entryX=0.5;entryY=1;" edge="1" parent="1" source="roleplayChat" target="roleplaySetup">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="1900" y="340" />
+              <mxPoint x="1640" y="340" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

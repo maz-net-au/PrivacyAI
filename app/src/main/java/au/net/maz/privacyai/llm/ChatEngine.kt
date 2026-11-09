@@ -20,6 +20,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.encodeToJsonElement
@@ -32,6 +37,14 @@ import kotlinx.serialization.json.encodeToJsonElement
 class ChatEngine(private val app: PrivacyApp) {
 
     private val store: Store get() = app.session.store ?: throw CancellationException("Locked")
+
+    private val _live = MutableStateFlow<Map<String, Message>>(emptyMap())
+
+    /**
+     * Replies being written, by message id, with every token so far. The stored copy is
+     * only saved now and then, so screens show these over it while it's still pending.
+     */
+    val live: StateFlow<Map<String, Message>> = _live
 
     fun replyTaskId(conversationId: String) = "reply:$conversationId"
 
@@ -112,14 +125,13 @@ class ChatEngine(private val app: PrivacyApp) {
                 m.id to m.text
             }
         }
-        val used = streamIntoMessage(request, s.llmAddress) { text, pending, error ->
+        val used = streamIntoMessage(
+            request, s.llmAddress, replyId,
+            start = store.chat(chatId)?.messages?.firstOrNull { it.id == replyId },
+            render = { m, text -> m.withText(base + withoutEcho(stripThink(base), text)) },
+        ) { change ->
             store.updateChat(chatId) { c ->
-                c.copy(
-                    updatedAt = System.currentTimeMillis(),
-                    messages = c.messages.map {
-                        if (it.id == replyId) it.withText(base + withoutEcho(stripThink(base), text)).copy(pending = pending, error = error) else it
-                    },
-                )
+                c.copy(updatedAt = System.currentTimeMillis(), messages = c.messages.map { if (it.id == replyId) change(it) else it })
             }
         }
         if (used > 0) {
@@ -201,19 +213,19 @@ class ChatEngine(private val app: PrivacyApp) {
         val prefix = if (forced != null && rp.characters.size > 1) "${forced.name}:" else ""
         // What was prefilled as the start of the reply, which newer servers send back first.
         val prefill = if (mode == Mode.CONTINUE) Prompts.assistantText(rp, targetMsg!!) else prefix
-        val used = streamIntoMessage(request, s.llmAddress) { raw, pending, error ->
+        val used = streamIntoMessage(
+            request, s.llmAddress, replyId,
+            start = store.roleplay(rpId)?.messages?.firstOrNull { it.id == replyId },
+            render = { m, raw ->
+                if (mode == Mode.CONTINUE) m.withText(base + withoutEcho(prefill, raw))
+                else {
+                    val (speaker, text) = Prompts.parseSpeaker(rp, prefix + withoutEcho(prefill, raw), forced?.id)
+                    m.withText(text).copy(speaker = speaker)
+                }
+            },
+        ) { change ->
             store.updateRoleplay(rpId) { r ->
-                r.copy(
-                    updatedAt = System.currentTimeMillis(),
-                    messages = r.messages.map {
-                        if (it.id != replyId) it
-                        else if (mode == Mode.CONTINUE) it.withText(base + withoutEcho(prefill, raw)).copy(pending = pending, error = error)
-                        else {
-                            val (speaker, text) = Prompts.parseSpeaker(r, prefix + withoutEcho(prefill, raw), forced?.id)
-                            it.withText(text).copy(speaker = speaker, pending = pending, error = error)
-                        }
-                    },
-                )
+                r.copy(updatedAt = System.currentTimeMillis(), messages = r.messages.map { if (it.id == replyId) change(it) else it })
             }
         }
         if (used > 0) {
@@ -358,22 +370,39 @@ class ChatEngine(private val app: PrivacyApp) {
 
     // ---- shared ---------------------------------------------------------------------
 
-    /** Streams into a message. Returns the tokens in context afterwards (0 if unknown). */
+    /**
+     * Streams into message [id]. [render] puts the text so far into a message; [write]
+     * saves a change to the stored copy. Every token goes to [live] (from [start], the
+     * pending message); the store only gets a save every second and at the end.
+     * Returns the tokens in context afterwards (0 if unknown).
+     */
     private suspend fun streamIntoMessage(
         request: ChatRequest,
         address: String,
-        update: suspend (text: String, pending: Boolean, error: String?) -> Unit,
+        id: String,
+        start: Message?,
+        render: (Message, String) -> Message,
+        write: suspend ((Message) -> Message) -> Unit,
     ): Int {
         val sb = StringBuilder()
         var used = 0
+        var shown: Message? = null
+        suspend fun update(text: String, pending: Boolean, error: String?) =
+            write { render(it, text).copy(pending = pending, error = error) }
+        _live.update { it - id }
         try {
             require(address.isNotBlank()) { "No LLM server address is set (Settings)" }
             require(request.model.isNotBlank()) { "No model selected" }
             var lastWrite = 0L
             app.llama.streamChat(address, request) { used = it }.collect { delta ->
                 sb.append(delta)
+                if (start != null) {
+                    val m = render(start, sb.toString()).copy(pending = true, error = null)
+                    shown = m
+                    _live.update { it + (id to m) }
+                }
                 val now = System.currentTimeMillis()
-                if (now - lastWrite > 300) {
+                if (now - lastWrite > 1000) {
                     lastWrite = now
                     update(sb.toString(), true, null)
                 }
@@ -384,6 +413,14 @@ class ChatEngine(private val app: PrivacyApp) {
             throw c
         } catch (t: Throwable) {
             update(sb.toString(), false, t.message ?: "Request failed")
+        } finally {
+            // Kept a moment so the final save reaches the screen first (screens only use
+            // it while the stored copy is pending); not if a newer stream replaced it.
+            val last = shown
+            if (last != null) app.appScope.launch {
+                delay(2_000)
+                _live.update { if (it[id] === last) it - id else it }
+            }
         }
         return used
     }

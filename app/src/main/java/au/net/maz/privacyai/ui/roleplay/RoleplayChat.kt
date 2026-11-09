@@ -139,7 +139,9 @@ fun RoleplayChatScreen(id: String) {
         AppScaffold(title = "Roleplay", onBack = { nav.popBackStack() }) {}
         return
     }
-    val messages = rp.messages
+    // Replies being written: every token so far, ahead of the stored copy (saved now and then).
+    val live by app.engine.live.collectAsState()
+    val messages = if (live.isEmpty()) rp.messages else rp.messages.map { m -> live[m.id]?.takeIf { m.pending } ?: m }
     // Show the newest text as it's written.
     FollowNewest(listState, messages.size, messages.lastOrNull()?.text?.length ?: 0)
 
@@ -248,7 +250,8 @@ fun RoleplayChatScreen(id: String) {
                     rp.messages.flatMap { m -> m.attachments.map { it.mediaId } }.toSet() + rp.characters.mapNotNull { it.referenceImage }
                 }
                 val unsent = gallery.filter {
-                    it.info.origin == MediaInfo.ORIGIN_GENERATED && it.id !in used && it.kind != MediaKind.AUDIO
+                    it.info.origin == MediaInfo.ORIGIN_GENERATED && it.id !in used && it.kind != MediaKind.AUDIO &&
+                        it.id !in rp.trayDismissed
                 }
                 val settings by store.settings.collectAsState(initial = null)
                 GenerationTray(
@@ -258,11 +261,16 @@ fun RoleplayChatScreen(id: String) {
                     revealed = revealed.toSet(),
                     onReveal = { revealed += it },
                     attached = attachments.map { it.mediaId }.toSet(),
-                    onToggleAttach = { m ->
-                        if (attachments.any { it.mediaId == m.id }) attachments.removeAll { it.mediaId == m.id }
-                        else attachments += Attachment(m.id, m.info.description)
+                    onView = { m -> nav.navigate(Routes.viewer(m.id, owner)) }, // swipes through the whole roleplay gallery
+                    onDismiss = { m ->
+                        scope.launch {
+                            store.updateRoleplay(id) { r ->
+                                // Only ids still in the gallery are kept, so the list doesn't grow forever.
+                                val keep = gallery.map { it.id }.toSet()
+                                r.copy(trayDismissed = (r.trayDismissed.filter { it in keep } + m.id).distinct())
+                            }
+                        }
                     },
-                    onView = { m -> nav.navigate(Routes.viewer(m.id)) }, // just this one: the others may still be hidden
                     onDelete = { m ->
                         attachments.removeAll { it.mediaId == m.id }
                         scope.launch { app.runner?.cancelForMedia(m.id); store.deleteMedia(m.id) }

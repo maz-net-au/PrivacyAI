@@ -142,7 +142,11 @@ fun ChatScreen(routeId: String) {
     val owner = MediaOwner.chat(id)
     val photos = rememberPhotoSources(owner) { attachments += it.id }
     val listState = rememberLazyListState()
-    val messages = chat?.messages.orEmpty()
+    // Replies being written: every token so far, ahead of the stored copy (saved now and then).
+    val live by app.engine.live.collectAsState()
+    val messages = chat?.messages.orEmpty().let { list ->
+        if (live.isEmpty()) list else list.map { m -> live[m.id]?.takeIf { m.pending } ?: m }
+    }
 
     LaunchedEffect(Unit) { app.engine.clearStalePending(id, isRoleplay = false) }
     // Show the newest text as it's written.

@@ -165,6 +165,8 @@ data class Roleplay(
     /** True until the setup screen's "Start roleplay" is pressed. */
     val draft: Boolean = true,
     val usage: ContextUsage = ContextUsage(),
+    /** Generations swiped out of the chat's tray (they stay in the roleplay gallery). */
+    val trayDismissed: List<String> = emptyList(),
 ) {
     val owner: String get() = MediaOwner.roleplay(id)
     val effectiveDescriptionModel: String get() = descriptionModel ?: model

@@ -12,6 +12,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.ime
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.ui.layout.onSizeChanged
@@ -404,7 +406,8 @@ fun openMedia(): (String) -> Unit {
 /**
  * Keeps a chat scrolled to the bottom of the newest message while it grows (streaming),
  * so the newest text is always showing. Dragging the list stops following; scrolling back
- * to the bottom, or a new message, starts it again.
+ * to the bottom, or a new message, starts it again. The keyboard opening (as it slides in)
+ * also goes back to the bottom, so it doesn't cover the conversation (as the old app did).
  */
 @Composable
 fun FollowNewest(listState: LazyListState, count: Int, lastLength: Int) {
@@ -421,6 +424,8 @@ fun FollowNewest(listState: LazyListState, count: Int, lastLength: Int) {
         if (!visible) listState.scrollToItem(count - 1)
         listState.scrollBy(100_000f) // stops at the end
     }
+    val ime = WindowInsets.ime.getBottom(LocalDensity.current)
+    LaunchedEffect(ime) { if (ime > 0) follow = true; if (follow) toEnd() }
     LaunchedEffect(count) { follow = true; toEnd() }
     LaunchedEffect(lastLength) { if (follow) toEnd() }
 }

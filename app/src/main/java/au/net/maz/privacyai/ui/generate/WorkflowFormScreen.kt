@@ -19,6 +19,21 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -233,9 +248,17 @@ fun WorkflowFormScreen(workflowId: String, owner: String, fromMediaId: String, r
         }
     }
 
+    // Where the visible area ends and the Generate button starts (window coordinates), to
+    // show a floating Generate button while the real one is scrolled off the bottom.
+    var viewBottom by remember { mutableFloatStateOf(0f) }
+    var buttonTop by remember { mutableFloatStateOf(0f) }
     AppScaffold(title = form.name.ifBlank { "Generate" }, onBack = { nav.popBackStack() }) { pad ->
+      Box(
+          Modifier.padding(pad).fillMaxSize().imePadding()
+              .onGloballyPositioned { viewBottom = it.boundsInWindow().bottom },
+      ) {
         Column(
-            Modifier.padding(pad).fillMaxSize().imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+            Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Column(Modifier.widthIn(max = 720.dp).fillMaxWidth().padding(bottom = 32.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -248,11 +271,26 @@ fun WorkflowFormScreen(workflowId: String, owner: String, fromMediaId: String, r
                 form.description?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                 form.fields.forEachIndexed { i, f -> FieldControl(f, i, owner, keyBase, resultKey) }
                 form.submitError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                Button(onClick = ::generate, enabled = !form.submitting, modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = ::generate, enabled = !form.submitting,
+                    modifier = Modifier.fillMaxWidth().onGloballyPositioned { buttonTop = it.positionInWindow().y },
+                ) {
                     Text(if (form.submitting) "Starting..." else "Generate")
                 }
             }
         }
+        AnimatedVisibility(
+            visible = form.loaded && buttonTop > viewBottom,
+            enter = scaleIn() + fadeIn(), exit = scaleOut() + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+        ) {
+            ExtendedFloatingActionButton(
+                onClick = { if (!form.submitting) generate() },
+                icon = { Icon(Icons.AutoMirrored.Filled.Send, null) },
+                text = { Text(if (form.submitting) "Starting..." else "Generate") },
+            )
+        }
+      }
     }
 }
 

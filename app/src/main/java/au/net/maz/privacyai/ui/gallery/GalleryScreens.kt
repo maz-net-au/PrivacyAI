@@ -90,8 +90,11 @@ fun MediaGridScreen(owner: String, resultKey: String) {
     val allItems by store.observeMedia(owner).collectAsState(initial = emptyList())
     val isMain = owner == MediaOwner.GALLERY
     // A newly opened gallery starts with spoilers hidden (not on returning from the viewer).
-    screenState("spoilersOff") { store.showSpoilers.value = false }
-    val showSpoilers by store.showSpoilers.collectAsState()
+    // Picking uses its own switch, for that one pick, leaving the gallery's alone.
+    var pickSpoilers by kept("pickSpoilers") { false }
+    if (!picking) screenState("spoilersOff") { store.showSpoilers.value = false }
+    val galleryShows by store.showSpoilers.collectAsState()
+    val showSpoilers = if (picking) pickSpoilers else galleryShows
     val items = if (isMain && !showSpoilers) allItems.filterNot { it.info.spoiler } else allItems
     var tab by kept("tab") { 0 }
     val photos = rememberPhotoSources(owner, allowVideo = !picking) { m ->
@@ -110,7 +113,9 @@ fun MediaGridScreen(owner: String, resultKey: String) {
             MenuItem("Take photo") { photos.takePhoto() },
         ),
         actions = {
-            if (isMain) IconButton(onClick = { store.showSpoilers.value = !showSpoilers }) {
+            if (isMain) IconButton(onClick = {
+                if (picking) pickSpoilers = !pickSpoilers else store.showSpoilers.value = !showSpoilers
+            }) {
                 if (showSpoilers) Icon(Icons.Filled.Visibility, "Hide spoilers")
                 else Icon(Icons.Filled.VisibilityOff, "Show spoilers")
             }

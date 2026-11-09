@@ -33,6 +33,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -98,6 +100,8 @@ fun InputPickerScreen(owner: String, kind: MediaKind, resultKey: String) {
     val tabs = if (inRoleplay) InputTab.entries else listOf(InputTab.DEVICE, InputTab.GALLERY)
     var tab by kept("tab") { 0 }
     var importing by remember { mutableStateOf(false) }
+    // The Gallery tab hides spoilers; the eye shows them for this one pick only.
+    var showSpoilers by kept("spoilers") { false }
 
     fun choose(id: String) { app.results.put(resultKey, id); nav.popBackStack() }
 
@@ -120,6 +124,10 @@ fun InputPickerScreen(owner: String, kind: MediaKind, resultKey: String) {
         title = "Choose ${kind.label.lowercase()}",
         onBack = { nav.popBackStack() },
         actions = {
+            if (tabs[pager.currentPage] == InputTab.GALLERY) IconButton(onClick = { showSpoilers = !showSpoilers }) {
+                if (showSpoilers) Icon(Icons.Filled.Visibility, "Hide spoilers")
+                else Icon(Icons.Filled.VisibilityOff, "Show spoilers")
+            }
             if (kind == MediaKind.IMAGE) {
                 IconButton(onClick = { photos.takePhoto() }) { Icon(Icons.Filled.PhotoCamera, "Take photo") }
             }
@@ -141,8 +149,8 @@ fun InputPickerScreen(owner: String, kind: MediaKind, resultKey: String) {
             Box(Modifier.fillMaxSize()) {
                 HorizontalPager(pager, Modifier.fillMaxSize(), key = { tabs[it] }) { page ->
                     when (tabs[page]) {
-                        InputTab.ROLEPLAY -> StoredGrid(owner, kind, ::choose)
-                        InputTab.GALLERY -> StoredGrid(MediaOwner.GALLERY, kind, ::choose)
+                        InputTab.ROLEPLAY -> StoredGrid(owner, kind, showSpoilers = true, ::choose)
+                        InputTab.GALLERY -> StoredGrid(MediaOwner.GALLERY, kind, showSpoilers, ::choose)
                         InputTab.DEVICE -> if (granted) DeviceGrid(kind) { uri ->
                             if (importing) return@DeviceGrid
                             importing = true
@@ -163,12 +171,10 @@ fun InputPickerScreen(owner: String, kind: MediaKind, resultKey: String) {
 
 /** Finished items of [kind] from the app's own (encrypted) media. */
 @Composable
-private fun StoredGrid(owner: String, kind: MediaKind, onPick: (String) -> Unit) {
+private fun StoredGrid(owner: String, kind: MediaKind, showSpoilers: Boolean, onPick: (String) -> Unit) {
     val items by LocalStore.current.observeMedia(owner).collectAsState(initial = emptyList())
-    val showSpoilers by LocalStore.current.showSpoilers.collectAsState()
     val shown = items.filter {
-        it.kind == kind && it.status == MediaStatus.DONE && it.fileId != null &&
-            (owner != MediaOwner.GALLERY || showSpoilers || !it.info.spoiler)
+        it.kind == kind && it.status == MediaStatus.DONE && it.fileId != null && (showSpoilers || !it.info.spoiler)
     }
     if (shown.isEmpty()) {
         Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) { Text("Nothing here yet.") }

@@ -240,11 +240,6 @@ fun ViewerScreen(id: String, owner: String, kind: MediaKind?) {
             val item = list[page]
             val actions = @Composable {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
-                    val wf = item.info.workflowId
-                    if (wf != null) OutlinedButton(onClick = { nav.navigate(Routes.form(wf, item.owner, from = item.id)) }) { Text("Regenerate") }
-                    if (item.status == MediaStatus.DONE) OutlinedButton(onClick = {
-                        exporter.launch("privacyai-${item.createdAt}.${ComfyRunner.extFor(item.mime)}")
-                    }) { Text("Export") }
                     OutlinedButton(onClick = {
                         scope.launch {
                             val r = snackbar.showSnackbar(
@@ -259,6 +254,11 @@ fun ViewerScreen(id: String, owner: String, kind: MediaKind?) {
                             }
                         }
                     }) { Text("Delete") }
+                    if (item.status == MediaStatus.DONE) OutlinedButton(onClick = {
+                        exporter.launch("privacyai-${item.createdAt}.${ComfyRunner.extFor(item.mime)}")
+                    }) { Text("Export") }
+                    val wf = item.info.workflowId
+                    if (wf != null) OutlinedButton(onClick = { nav.navigate(Routes.form(wf, item.owner, from = item.id)) }) { Text("Regenerate") }
                 }
             }
             val details = @Composable {
@@ -294,27 +294,27 @@ fun ViewerScreen(id: String, owner: String, kind: MediaKind?) {
 private fun Details(m: Media, actions: @Composable () -> Unit, onSpoiler: (Boolean) -> Unit) {
     val context = LocalContext.current
     actions()
-    if (m.owner == MediaOwner.GALLERY) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-            Text("Spoiler / NSFW", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-            Switch(checked = m.info.spoiler, onCheckedChange = onSpoiler)
-        }
-    }
     m.info.error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 8.dp)) }
     if (m.status == MediaStatus.PENDING) Text("Generating...", style = MaterialTheme.typography.bodyMedium)
-    m.info.generationMs?.let { ms ->
-        val label = if (m.status == MediaStatus.FAILED) "Failed after" else "Generation time"
-        Text("$label: ${formatDuration(ms)}", style = MaterialTheme.typography.bodyMedium)
-    }
     if (m.info.description.isNotBlank()) {
         Text("Prompt / description", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
         Text(m.info.description, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.clickable { copyText(context, m.info.description) })
+    }
+    if (m.owner == MediaOwner.GALLERY) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+            Text("Spoiler / NSFW", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Switch(checked = m.info.spoiler, onCheckedChange = onSpoiler)
+        }
     }
     if (m.info.values.isNotEmpty()) {
         Text("Settings", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 12.dp))
         m.info.values.filter { it.value != m.info.description }.forEach { v ->
             Text("${v.input}: ${v.value}", style = MaterialTheme.typography.bodySmall)
         }
+    }
+    m.info.generationMs?.let { ms ->
+        val label = if (m.status == MediaStatus.FAILED) "Failed after" else "Generation time"
+        Text("$label: ${formatDuration(ms)}", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 8.dp))
     }
     if (m.info.files.isNotEmpty()) {
         Text("Input images: ${m.info.files.size}", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 8.dp))

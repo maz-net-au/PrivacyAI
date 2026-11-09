@@ -114,12 +114,17 @@ fun RoleplayChatScreen(id: String) {
     val photos = rememberPhotoSources(owner) { attachments += Attachment(it.id) }
     val listState = rememberLazyListState()
 
-    // An image picked from the roleplay gallery comes back here.
-    val results by app.results.values.collectAsState()
-    LaunchedEffect(results[pickKey]) {
-        app.results.take<String>(pickKey)?.let { mediaId ->
-            val m = store.media(mediaId)
-            if (attachments.none { it.mediaId == mediaId }) attachments += Attachment(mediaId, m?.info?.description.orEmpty())
+    // An image picked from the roleplay gallery comes back here. Collected in one long-lived
+    // effect: an effect keyed on the result was cancelled by taking the result (the key
+    // changes) while it was still looking the image up, so the pick could be lost.
+    LaunchedEffect(pickKey) {
+        app.results.values.collect { values ->
+            if (values[pickKey] == null) return@collect
+            val mediaId = app.results.take<String>(pickKey) ?: return@collect
+            if (attachments.none { it.mediaId == mediaId }) {
+                val description = store.media(mediaId)?.info?.description.orEmpty()
+                attachments += Attachment(mediaId, description)
+            }
         }
     }
     LaunchedEffect(Unit) { app.engine.clearStalePending(id, isRoleplay = true) }

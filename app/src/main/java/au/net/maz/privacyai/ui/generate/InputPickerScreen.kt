@@ -165,7 +165,11 @@ fun InputPickerScreen(owner: String, kind: MediaKind, resultKey: String) {
 @Composable
 private fun StoredGrid(owner: String, kind: MediaKind, onPick: (String) -> Unit) {
     val items by LocalStore.current.observeMedia(owner).collectAsState(initial = emptyList())
-    val shown = items.filter { it.kind == kind && it.status == MediaStatus.DONE && it.fileId != null }
+    val showSpoilers by LocalStore.current.showSpoilers.collectAsState()
+    val shown = items.filter {
+        it.kind == kind && it.status == MediaStatus.DONE && it.fileId != null &&
+            (owner != MediaOwner.GALLERY || showSpoilers || !it.info.spoiler)
+    }
     if (shown.isEmpty()) {
         Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) { Text("Nothing here yet.") }
         return

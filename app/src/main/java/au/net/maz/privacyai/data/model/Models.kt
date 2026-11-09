@@ -228,6 +228,8 @@ data class MediaInfo(
      * (includes model loading). Null if unknown, e.g. made before this was recorded.
      */
     val generationMs: Long? = null,
+    /** Main gallery only: hidden from the gallery unless its "show spoilers" eye is on. */
+    val spoiler: Boolean = false,
 ) {
     companion object {
         const val ORIGIN_GENERATED = "generated"

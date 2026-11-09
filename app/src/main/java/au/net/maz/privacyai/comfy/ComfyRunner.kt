@@ -198,9 +198,11 @@ class ComfyRunner(
             }
             failure?.let { return fail(job, it.message ?: "Download failed") }
             val mime = mimeFor(ref.filename)
+            // Re-read: the info may have changed while it ran (e.g. marked as a spoiler).
+            val info = (store.media(job.mediaId) ?: placeholder).info
             val done = placeholder.copy(
                 fileId = fileId, mime = mime, kind = MediaKind.fromMime(mime), status = MediaStatus.DONE,
-                info = placeholder.info.copy(generationMs = durationMs),
+                info = info.copy(generationMs = durationMs),
             )
             if (i == 0) {
                 // Still there? (It may have been deleted while downloading.)

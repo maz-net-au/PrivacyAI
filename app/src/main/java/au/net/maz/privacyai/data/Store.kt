@@ -21,6 +21,7 @@ import au.net.maz.privacyai.data.model.Settings
 import au.net.maz.privacyai.data.model.UtilityChat
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -39,6 +40,12 @@ class Store(val db: AppDatabase, val files: MediaFiles) {
 
     /** Serialises read-modify-write of one roleplay/chat blob (streaming replies, edits). */
     private val writeLock = Mutex()
+
+    /**
+     * Whether the main gallery shows items marked as spoilers. Not saved: off whenever a
+     * gallery is opened, and gone on lock along with the rest of the Store.
+     */
+    val showSpoilers = MutableStateFlow(false)
 
     // ---- settings / presets -------------------------------------------------------
 

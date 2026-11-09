@@ -31,6 +31,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Switch
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.runtime.mutableStateListOf
+import au.net.maz.privacyai.ui.screenState
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.MaterialTheme
@@ -81,7 +87,12 @@ fun MediaGridScreen(owner: String, resultKey: String) {
     val nav = LocalNav.current
     val scope = rememberCoroutineScope()
     val picking = resultKey.isNotBlank()
-    val items by store.observeMedia(owner).collectAsState(initial = emptyList())
+    val allItems by store.observeMedia(owner).collectAsState(initial = emptyList())
+    val isMain = owner == MediaOwner.GALLERY
+    // A newly opened gallery starts with spoilers hidden (not on returning from the viewer).
+    screenState("spoilersOff") { store.showSpoilers.value = false }
+    val showSpoilers by store.showSpoilers.collectAsState()
+    val items = if (isMain && !showSpoilers) allItems.filterNot { it.info.spoiler } else allItems
     var tab by kept("tab") { 0 }
     val photos = rememberPhotoSources(owner, allowVideo = !picking) { m ->
         if (picking) { app.results.put(resultKey, m.id); nav.popBackStack() }
@@ -98,6 +109,12 @@ fun MediaGridScreen(owner: String, resultKey: String) {
             MenuItem("Add from device") { photos.pickFromDevice() },
             MenuItem("Take photo") { photos.takePhoto() },
         ),
+        actions = {
+            if (isMain) IconButton(onClick = { store.showSpoilers.value = !showSpoilers }) {
+                if (showSpoilers) Icon(Icons.Filled.Visibility, "Hide spoilers")
+                else Icon(Icons.Filled.VisibilityOff, "Show spoilers")
+            }
+        },
     ) { pad ->
         val open: (Media) -> Unit = { m ->
             if (picking) { app.results.put(resultKey, m.id); nav.popBackStack() }
@@ -186,8 +203,14 @@ fun ViewerScreen(id: String, owner: String, kind: MediaKind?) {
     val galleryItems by remember(owner) {
         if (owner.isBlank()) kotlinx.coroutines.flow.flowOf(null) else store.observeMedia(owner)
     }.collectAsState(initial = null)
+    val showSpoilers by store.showSpoilers.collectAsState()
+    // Marked as a spoiler here: stays in view rather than vanishing from under the switch.
+    val markedHere = remember { mutableStateListOf<String>() }
     val list: List<Media>? = if (owner.isBlank()) single?.let { listOf(it) }
-    else galleryItems?.filter { kind == null || it.kind == kind }
+    else galleryItems?.filter {
+        (kind == null || it.kind == kind) &&
+            (owner != MediaOwner.GALLERY || showSpoilers || !it.info.spoiler || it.id in markedHere)
+    }
     if (list == null) {
         AppScaffold(title = "", onBack = { nav.popBackStack() }) {}
         return
@@ -238,7 +261,12 @@ fun ViewerScreen(id: String, owner: String, kind: MediaKind?) {
                     }) { Text("Delete") }
                 }
             }
-            val details = @Composable { Details(item, actions) }
+            val details = @Composable {
+                Details(item, actions, onSpoiler = { on ->
+                    if (on) markedHere += item.id
+                    scope.launch { store.updateMedia(item.id) { it.copy(info = it.info.copy(spoiler = on)) } }
+                })
+            }
             BoxWithConstraints(Modifier.fillMaxSize()) {
                 if (maxWidth > maxHeight) {
                     Row(Modifier.fillMaxSize()) {
@@ -263,9 +291,15 @@ fun ViewerScreen(id: String, owner: String, kind: MediaKind?) {
 }
 
 @Composable
-private fun Details(m: Media, actions: @Composable () -> Unit) {
+private fun Details(m: Media, actions: @Composable () -> Unit, onSpoiler: (Boolean) -> Unit) {
     val context = LocalContext.current
     actions()
+    if (m.owner == MediaOwner.GALLERY) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+            Text("Spoiler / NSFW", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            Switch(checked = m.info.spoiler, onCheckedChange = onSpoiler)
+        }
+    }
     m.info.error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 8.dp)) }
     if (m.status == MediaStatus.PENDING) Text("Generating...", style = MaterialTheme.typography.bodyMedium)
     m.info.generationMs?.let { ms ->

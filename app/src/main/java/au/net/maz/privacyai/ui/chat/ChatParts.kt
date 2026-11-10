@@ -88,8 +88,13 @@ import au.net.maz.privacyai.ui.components.PrivateText
 import kotlinx.coroutines.launch
 import java.io.File
 
-/** Taking a photo or picking one from the device, imported (encrypted) into [owner]. */
-class PhotoSources(val pickFromDevice: () -> Unit, val takePhoto: () -> Unit)
+/**
+ * Taking a photo or picking one from the device, imported (encrypted) into [owner].
+ * [pickFromDevice]: the photo picker (the phone's photo gallery). [pickFile]: Android's
+ * file browser, for files anywhere (Downloads, other apps, cloud folders). Either way the
+ * app keeps only its own encrypted copy, not access to the original.
+ */
+class PhotoSources(val pickFromDevice: () -> Unit, val pickFile: () -> Unit, val takePhoto: () -> Unit)
 
 @Composable
 fun rememberPhotoSources(owner: String, allowVideo: Boolean = false, onImported: (Media) -> Unit): PhotoSources {
@@ -106,6 +111,9 @@ fun rememberPhotoSources(owner: String, allowVideo: Boolean = false, onImported:
     }
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        uri?.let { import(it, MediaInfo.ORIGIN_IMPORTED) }
+    }
+    val files = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let { import(it, MediaInfo.ORIGIN_IMPORTED) }
     }
     val camera = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
@@ -125,6 +133,7 @@ fun rememberPhotoSources(owner: String, allowVideo: Boolean = false, onImported:
                     ),
                 )
             },
+            pickFile = { files.launch(if (allowVideo) arrayOf("image/*", "video/*") else arrayOf("image/*")) },
             takePhoto = {
                 val dir = File(context.cacheDir, "camera").apply { mkdirs() }
                 dir.listFiles()?.forEach { it.delete() }

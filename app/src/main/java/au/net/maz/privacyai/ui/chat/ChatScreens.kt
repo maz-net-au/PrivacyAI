@@ -222,6 +222,7 @@ fun ChatScreen(routeId: String) {
                 onRemoveAttachment = { mid -> attachments.remove(mid); scope.launch { store.deleteMedia(mid) } },
                 plusMenu = listOf(
                     MenuItem("Choose photo") { photos.pickFromDevice() },
+                    MenuItem("Choose from files") { photos.pickFile() },
                     MenuItem("Take photo") { photos.takePhoto() },
                 ),
                 busy = busy,

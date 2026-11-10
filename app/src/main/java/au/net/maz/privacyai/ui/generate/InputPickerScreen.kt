@@ -33,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.CircularProgressIndicator
@@ -106,6 +107,17 @@ fun InputPickerScreen(owner: String, kind: MediaKind, resultKey: String) {
     fun choose(id: String) { app.results.put(resultKey, id); nav.popBackStack() }
 
     val photos = rememberPhotoSources(saveTo) { m -> choose(m.id) }
+    // Android's file browser, for files that aren't in the phone's media (no permission needed).
+    val browse = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null || importing) return@rememberLauncherForActivityResult
+        importing = true
+        scope.launch {
+            runCatching { PhotoImport.import(context, store, saveTo, uri, MediaInfo.ORIGIN_IMPORTED) }
+                .onSuccess { m -> if (m != null) choose(m.id) else toast(context, "Couldn't add that file") }
+                .onFailure { toast(context, "Couldn't add that file: ${it.message}") }
+            importing = false
+        }
+    }
 
     // Device media permission.
     val permissions = devicePermissions(kind)
@@ -128,6 +140,7 @@ fun InputPickerScreen(owner: String, kind: MediaKind, resultKey: String) {
                 if (showSpoilers) Icon(Icons.Filled.Visibility, "Hide spoilers")
                 else Icon(Icons.Filled.VisibilityOff, "Show spoilers")
             }
+            IconButton(onClick = { browse.launch(arrayOf("${kind.key}/*")) }) { Icon(Icons.Filled.Folder, "Browse files") }
             if (kind == MediaKind.IMAGE) {
                 IconButton(onClick = { photos.takePhoto() }) { Icon(Icons.Filled.PhotoCamera, "Take photo") }
             }

@@ -326,6 +326,7 @@ fun CharacterEditScreen(owner: String, routeId: String) {
                                         nav.navigate(Routes.gallery(if (inRoleplay) mediaOwner else MediaOwner.GALLERY, pickKey))
                                     })
                                     DropdownMenuItem(text = { Text("From device") }, onClick = { picker = false; photos.pickFromDevice() })
+                                    DropdownMenuItem(text = { Text("From files") }, onClick = { picker = false; photos.pickFile() })
                                     DropdownMenuItem(text = { Text("Take photo") }, onClick = { picker = false; photos.takePhoto() })
                                     if (c.referenceImage != null) DropdownMenuItem(text = { Text("Remove") }, onClick = { picker = false; c = c.copy(referenceImage = null) })
                                 }

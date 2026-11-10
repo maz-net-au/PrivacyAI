@@ -290,6 +290,7 @@ fun RoleplayChatScreen(id: String) {
                         MenuItem("Choose from roleplay gallery") { nav.navigate(Routes.gallery(owner, pickKey)) },
                         MenuItem("Take photo") { photos.takePhoto() },
                         MenuItem("Choose from device") { photos.pickFromDevice() },
+                        MenuItem("Choose from files") { photos.pickFile() },
                         MenuItem("Generate image...") { nav.navigate(Routes.section(MediaKind.IMAGE, owner)) },
                         MenuItem("Generate video...") { nav.navigate(Routes.section(MediaKind.VIDEO, owner)) },
                     ),

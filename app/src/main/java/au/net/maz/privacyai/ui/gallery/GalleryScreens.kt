@@ -110,6 +110,7 @@ fun MediaGridScreen(owner: String, resultKey: String) {
         onBack = { nav.popBackStack() },
         menu = listOf(
             MenuItem("Add from device") { photos.pickFromDevice() },
+            MenuItem("Add from files") { photos.pickFile() },
             MenuItem("Take photo") { photos.takePhoto() },
         ),
         actions = {

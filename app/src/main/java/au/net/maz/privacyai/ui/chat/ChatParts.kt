@@ -9,6 +9,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.layout.Spacer
@@ -267,7 +268,9 @@ fun MessageBubble(
                 if (selected && actions.isNotEmpty()) {
                     // Inside the bubble, scrolled into view when they appear.
                     val bring = remember { BringIntoViewRequester() }
-                    LaunchedEffect(Unit) { bring.bringIntoView() }
+                    // After the next frame, once they've been laid out (straight away they
+                    // have no position yet, so the scroll fell short).
+                    LaunchedEffect(Unit) { withFrameNanos { }; bring.bringIntoView() }
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -429,9 +432,11 @@ fun FollowNewest(listState: LazyListState, count: Int, lastLength: Int) {
     }
     suspend fun toEnd() {
         if (count == 0) return
-        val visible = listState.layoutInfo.visibleItemsInfo.any { it.index == count - 1 }
-        if (!visible) listState.scrollToItem(count - 1)
-        listState.scrollBy(100_000f) // stops at the end
+        // Wait a frame so a just-added message (or a bubble that just grew) has been laid
+        // out; scrolling straight away used the old layout and stopped short.
+        withFrameNanos { }
+        // A huge offset into the last item lands at the very end of the list, whatever its height.
+        listState.scrollToItem(count - 1, Int.MAX_VALUE)
     }
     val ime = WindowInsets.ime.getBottom(LocalDensity.current)
     LaunchedEffect(ime) { if (ime > 0) follow = true; if (follow) toEnd() }

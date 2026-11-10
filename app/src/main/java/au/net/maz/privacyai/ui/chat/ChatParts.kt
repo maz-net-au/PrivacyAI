@@ -9,6 +9,8 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.relocation.BringIntoViewRequester
@@ -270,11 +272,18 @@ fun MessageBubble(
                     val bring = remember { BringIntoViewRequester() }
                     // After the next frame, once they've been laid out (straight away they
                     // have no position yet, so the scroll fell short).
-                    LaunchedEffect(Unit) { withFrameNanos { }; bring.bringIntoView() }
+                    // The area asked for runs on past the chips, to take in the bubble's own
+                    // bottom padding and the gap below it, or the bubble's edge stays cut off.
+                    var chipsSize by remember { mutableStateOf(IntSize.Zero) }
+                    val below = with(LocalDensity.current) { 24.dp.toPx() }
+                    LaunchedEffect(Unit) {
+                        withFrameNanos { }
+                        bring.bringIntoView(Rect(0f, 0f, chipsSize.width.toFloat(), chipsSize.height + below))
+                    }
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.padding(top = 8.dp).bringIntoViewRequester(bring),
+                        modifier = Modifier.padding(top = 8.dp).bringIntoViewRequester(bring).onSizeChanged { chipsSize = it },
                     ) {
                         actions.forEach { a -> ActionChip(a) }
                     }

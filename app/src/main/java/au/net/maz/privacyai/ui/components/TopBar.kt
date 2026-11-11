@@ -35,6 +35,11 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Row
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -151,15 +156,16 @@ fun StatusRing() {
             Ring(colour, tasks.size)
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            // Tapping the ring tests both connections; "checking..." until the result is in.
+            // Tapping the ring tests both connections; a spinner replaces the light until the result is in.
             StatusLine("LLM", health.llm, checking)
             StatusLine("IMG", health.image, checking)
+            HorizontalDivider()
             if (tasks.isEmpty()) {
-                Text("No tasks running", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+                DropdownMenuItem(text = { Text("No tasks running") }, enabled = false, onClick = {})
             } else {
                 // Goes to the longest-running task that has somewhere to go.
                 DropdownMenuItem(
-                    text = { Text("${tasks.size} task${if (tasks.size == 1) "" else "s"} running", style = MaterialTheme.typography.bodySmall) },
+                    text = { Text("${tasks.size} task${if (tasks.size == 1) "" else "s"} running") },
                     onClick = {
                         scope.launch {
                             val route = app.tasks.idsOldestFirst().firstNotNullOfOrNull { routeFor(it) }
@@ -181,15 +187,27 @@ fun StatusRing() {
     }
 }
 
+/** A server's status as a light: green connected, red not, grey no address set (a spinner while checking). */
 @Composable
 private fun ColumnScope.StatusLine(name: String, s: ServerStatus, checking: Boolean) {
-    val text = when {
-        s == ServerStatus.NOT_SET -> "no address set"
-        checking || s == ServerStatus.UNKNOWN -> "checking..."
-        s == ServerStatus.UP -> "connected"
-        else -> "not connected"
+    val (colour, label) = when (s) {
+        ServerStatus.NOT_SET -> Color(0xFF9E9E9E) to "no address set"
+        ServerStatus.UP -> Color(0xFF2E9E4F) to "connected"
+        ServerStatus.DOWN -> Color(0xFFD93A3A) to "not connected"
+        ServerStatus.UNKNOWN -> Color(0xFF9E9E9E) to "checking"
     }
-    Text("$name: $text", modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+    val busy = s != ServerStatus.NOT_SET && (checking || s == ServerStatus.UNKNOWN)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+            .semantics(mergeDescendants = true) { contentDescription = "$name: ${if (busy) "checking" else label}" },
+    ) {
+        Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.width(48.dp))
+        Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) {
+            if (busy) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+            else Canvas(Modifier.size(14.dp)) { drawCircle(colour) }
+        }
+    }
 }
 
 @Composable

@@ -294,8 +294,8 @@ fun MessageBubble(
                         bring.bringIntoView(Rect(0f, 0f, chipsSize.width.toFloat(), chipsSize.height + below))
                     }
                     FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
                         modifier = Modifier.padding(top = 8.dp).bringIntoViewRequester(bring).onSizeChanged { chipsSize = it },
                     ) {
                         actions.forEach { a -> ActionChip(a) }
@@ -308,25 +308,31 @@ fun MessageBubble(
     }
 }
 
-/** A small button under a selected message (like the old app's action chips). */
+/**
+ * A button under a selected message (like the old app's action chips): icon only, so a
+ * full row fits on one line, with a hit target big enough for a thumb. The label is read
+ * out by screen readers.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ActionChip(item: MenuItem) {
     val haptics = LocalHapticFeedback.current
     val tint = if (item.label == "Delete") MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-    Row(
+    Box(
         Modifier
+            .size(width = 48.dp, height = 40.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.85f))
             .combinedClickable(
+                onClickLabel = item.label,
                 onClick = item.onClick,
                 onLongClick = item.onLongClick?.let { l -> { haptics.performHapticFeedback(HapticFeedbackType.LongPress); l() } },
-            )
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            ),
+        contentAlignment = Alignment.Center,
     ) {
-        item.icon?.let { Icon(it, null, tint = tint, modifier = Modifier.size(16.dp)); Spacer(Modifier.width(4.dp)) }
-        Text(item.label, fontSize = 13.sp, color = tint)
+        val icon = item.icon
+        if (icon != null) Icon(icon, item.label, tint = tint, modifier = Modifier.size(22.dp))
+        else Text(item.label, fontSize = 13.sp, color = tint, modifier = Modifier.padding(horizontal = 6.dp))
     }
 }
 

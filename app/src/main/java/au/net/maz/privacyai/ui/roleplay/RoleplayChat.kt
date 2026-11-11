@@ -11,6 +11,7 @@ import androidx.compose.foundation.border
 import au.net.maz.privacyai.ui.chat.FollowNewest
 import androidx.compose.material.icons.filled.ImageSearch
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Edit
@@ -214,10 +215,16 @@ fun RoleplayChatScreen(id: String) {
                         onOpenMedia = openMedia(),
                         selected = selectedId == m.id,
                         onSelect = { selectedId = if (selectedId == m.id) null else m.id },
-                        onCopy = { copyText(context, stripThink(m.text)) },
                         actions = buildList {
-                            if (!busy) {
-                                // Left to right: Delete, Edit, Continue, Regenerate (Delete kept away from the thumb).
+                            val copy = MenuItem("Copy", Icons.Filled.ContentCopy) { selectedId = null; copyText(context, stripThink(m.text)) }
+                            if (!isLast) {
+                                // Earlier messages: deleting one would break the turn order the server needs.
+                                add(copy)
+                                if (!busy) add(MenuItem("Edit", Icons.Filled.Edit) { selectedId = null; editing = m.id; editText = m.text })
+                            } else if (busy) {
+                                add(copy)
+                            } else {
+                                // Left to right: Delete, Copy, Edit, Continue, Regenerate (Delete kept away from the thumb).
                                 add(MenuItem("Delete", Icons.Filled.Delete) {
                                     selectedId = null
                                     // Deleting the last reply also takes back the message of yours
@@ -233,8 +240,9 @@ fun RoleplayChatScreen(id: String) {
                                     val gone = setOfNotNull(m.id, prev?.id)
                                     scope.launch { store.updateRoleplay(id) { r -> r.copy(messages = r.messages.filter { it.id !in gone }) } }
                                 })
+                                add(copy)
                                 add(MenuItem("Edit", Icons.Filled.Edit) { selectedId = null; editing = m.id; editText = m.text })
-                                if (!m.isUser && isLast) {
+                                if (!m.isUser) {
                                     // Long-press: no stopping early (end-of-turn ignored, length capped).
                                     add(MenuItem("Continue", Icons.Filled.PlayArrow, onLongClick = { selectedId = null; app.engine.continueRoleplay(id, m.id, ignoreEos = true) }) { selectedId = null; app.engine.continueRoleplay(id, m.id) })
                                     add(MenuItem("Regenerate", Icons.Filled.Refresh, onLongClick = { selectedId = null; app.engine.regenerateRoleplay(id, m.id, ignoreEos = true) }) { selectedId = null; app.engine.regenerateRoleplay(id, m.id) })

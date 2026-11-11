@@ -248,9 +248,10 @@ fun ViewerScreen(id: String, owner: String, kind: MediaKind?) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
                     OutlinedButton(onClick = {
                         scope.launch {
+                            val running = item.status == MediaStatus.PENDING
                             val r = snackbar.showSnackbar(
-                                if (item.status == MediaStatus.PENDING) "Cancel and delete this item?" else "Delete this item?",
-                                actionLabel = "Delete", withDismissAction = true,
+                                if (running) "Cancel this generation? It won't be kept." else "Delete this item?",
+                                actionLabel = if (running) "Cancel it" else "Delete", withDismissAction = true,
                             )
                             if (r == SnackbarResult.ActionPerformed) {
                                 app.runner?.cancelForMedia(item.id)
@@ -259,7 +260,7 @@ fun ViewerScreen(id: String, owner: String, kind: MediaKind?) {
                                 if (list.size <= 1) nav.popBackStack()
                             }
                         }
-                    }) { Text("Delete") }
+                    }) { Text(if (item.status == MediaStatus.PENDING) "Cancel" else "Delete") }
                     if (item.status == MediaStatus.DONE) OutlinedButton(onClick = {
                         exporter.launch("privacyai-${item.createdAt}.${ComfyRunner.extFor(item.mime)}")
                     }) { Text("Export") }

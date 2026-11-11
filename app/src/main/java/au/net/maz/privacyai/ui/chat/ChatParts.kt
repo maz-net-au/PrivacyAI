@@ -9,6 +9,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.runtime.withFrameNanos
@@ -188,8 +189,6 @@ fun MessageBubble(
     actions: List<MenuItem> = emptyList(),
     selected: Boolean = false,
     onSelect: () -> Unit = {},
-    /** Long-press opens a small Copy menu where you pressed. */
-    onCopy: (() -> Unit)? = null,
     onOpenMedia: (String) -> Unit = {},
     versionIndex: Int = 0,
     versionCount: Int = 1,
@@ -201,8 +200,7 @@ fun MessageBubble(
     roleplayWidths: Boolean = false,
 ) {
     val store = LocalStore.current
-    var copyAt by remember { mutableStateOf<Offset?>(null) }
-    var bubbleHeight by remember { mutableStateOf(0) }
+    val select by rememberUpdatedState(onSelect)
     val density = LocalDensity.current
     var showThink by remember { mutableStateOf(false) }
     val (think, answer) = remember(text) { splitThink(text) }
@@ -223,13 +221,7 @@ fun MessageBubble(
                 bubbleWidth
                     .clip(RoundedCornerShape(16.dp))
                     .background(background)
-                    .onSizeChanged { bubbleHeight = it.height }
-                    .pointerInput(onCopy) {
-                        detectTapGestures(
-                            onTap = { onSelect() },
-                            onLongPress = { pos -> if (onCopy != null) copyAt = pos },
-                        )
-                    }
+                    .pointerInput(Unit) { detectTapGestures(onTap = { select() }) }
                     .padding(horizontal = 12.dp, vertical = 8.dp),
             ) {
                 name?.let { Text(it, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = nameColour) }
@@ -309,19 +301,6 @@ fun MessageBubble(
                         actions.forEach { a -> ActionChip(a) }
                     }
                 }
-            }
-            // Copy, next to where the finger was (the offset is from the bubble's bottom-left).
-            val at = copyAt
-            DropdownMenu(
-                expanded = at != null,
-                onDismissRequest = { copyAt = null },
-                offset = with(density) { DpOffset((at?.x ?: 0f).toDp(), ((at?.y ?: 0f) - bubbleHeight).toDp()) },
-            ) {
-                DropdownMenuItem(
-                    text = { Text("Copy") },
-                    leadingIcon = { Icon(Icons.Filled.ContentCopy, null) },
-                    onClick = { copyAt = null; onCopy?.invoke() },
-                )
             }
         }
         }

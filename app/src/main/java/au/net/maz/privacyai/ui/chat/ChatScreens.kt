@@ -1,6 +1,7 @@
 package au.net.maz.privacyai.ui.chat
 
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.PlayArrow
 import android.content.ClipData
@@ -188,10 +189,11 @@ fun ChatScreen(routeId: String) {
                         onOpenMedia = openMedia(),
                         selected = selectedId == m.id,
                         onSelect = { selectedId = if (selectedId == m.id) null else m.id },
-                        onCopy = { copyText(context, stripThink(m.text)) },
                         actions = buildList {
-                            // Left to right: Delete, Continue, Regenerate (Delete kept away from the thumb).
-                            if (!busy) add(MenuItem("Delete", Icons.Filled.Delete) {
+                            // Left to right: Delete, Copy, Continue, Regenerate (Delete kept away from the thumb).
+                            // Only the last message can be deleted: removing an earlier one would
+                            // break the turn order the server needs.
+                            if (isLast && !busy) add(MenuItem("Delete", Icons.Filled.Delete) {
                                 selectedId = null
                                 // Deleting the last reply also takes back the message of yours
                                 // just before it, into the input box (as the old app did).
@@ -206,6 +208,7 @@ fun ChatScreen(routeId: String) {
                                 val gone = setOfNotNull(m.id, prev?.id)
                                 scope.launch { store.updateChat(id) { c -> c.copy(messages = c.messages.filter { it.id !in gone }) } }
                             })
+                            add(MenuItem("Copy", Icons.Filled.ContentCopy) { selectedId = null; copyText(context, stripThink(m.text)) })
                             if (!m.isUser && isLast && !busy) {
                                 // Long-press: no stopping early (end-of-turn ignored, length capped).
                                 add(MenuItem("Continue", Icons.Filled.PlayArrow, onLongClick = { selectedId = null; app.engine.continueUtility(id, m.id, ignoreEos = true) }) { selectedId = null; app.engine.continueUtility(id, m.id) })

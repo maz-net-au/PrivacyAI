@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.DpOffset
@@ -175,6 +176,12 @@ fun MessageBubble(
     name: String? = null,
     nameColour: Color = textColour,
     attachments: List<String> = emptyList(),
+    /**
+     * Attachments still spoilered (roleplay): a plain "Tap to show" tile, nothing of the
+     * media loaded, until tapped ([onReveal]); then tapping opens it as usual.
+     */
+    hiddenAttachments: Set<String> = emptySet(),
+    onReveal: (String) -> Unit = {},
     pending: Boolean = false,
     error: String? = null,
     /** Buttons shown under the message while it's [selected] (tap to select). */
@@ -229,8 +236,22 @@ fun MessageBubble(
                 if (attachments.isNotEmpty()) {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 4.dp)) {
                         items(attachments) { id ->
-                            val media by store.observeMediaItem(id).collectAsState(initial = null)
-                            MediaThumb(media, Modifier.size(120.dp).clip(RoundedCornerShape(10.dp)).clickable { onOpenMedia(id) })
+                            if (id in hiddenAttachments) {
+                                Box(
+                                    Modifier.size(120.dp).clip(RoundedCornerShape(10.dp))
+                                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                                        .clickable { onReveal(id) },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Icon(Icons.Filled.VisibilityOff, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        Text("Tap to show", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                }
+                            } else {
+                                val media by store.observeMediaItem(id).collectAsState(initial = null)
+                                MediaThumb(media, Modifier.size(120.dp).clip(RoundedCornerShape(10.dp)).clickable { onOpenMedia(id) })
+                            }
                         }
                     }
                 }

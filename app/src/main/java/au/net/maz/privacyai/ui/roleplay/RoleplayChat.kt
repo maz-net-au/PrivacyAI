@@ -103,7 +103,8 @@ fun RoleplayChatScreen(id: String) {
     var input by kept("input") { "" }
     // The message whose buttons are showing (tap a message to show/hide them).
     var selectedId by kept<String?>("selected") { null }
-    // Generated images shown in the tray so far (they start hidden). Memory only.
+    // Media shown so far, in the tray or in messages (all start hidden). Memory only:
+    // everything is hidden again when the chat is next opened.
     val revealed = screenState("revealed") { mutableStateListOf<String>() }
     val attachments = screenState("attachments") { mutableStateListOf<Attachment>() }
     var speaker by kept<String?>("speaker") { null }
@@ -205,6 +206,9 @@ fun RoleplayChatScreen(id: String) {
                         name = Prompts.speakerName(rp, m),
                         nameColour = colours?.name ?: MaterialTheme.colorScheme.primary,
                         attachments = m.attachments.map { it.mediaId },
+                        // Spoilered until tapped; shared with the tray, kept until the chat is left.
+                        hiddenAttachments = m.attachments.map { it.mediaId }.filterNot { it in revealed }.toSet(),
+                        onReveal = { revealed += it },
                         pending = m.pending,
                         error = m.error,
                         onOpenMedia = openMedia(),

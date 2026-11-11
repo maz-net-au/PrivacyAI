@@ -39,6 +39,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Row
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
@@ -155,7 +156,8 @@ fun StatusRing() {
         IconButton(onClick = { open = true; app.health.refreshNow() }) {
             Ring(colour, tasks.size)
         }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+        // A set width, so the status rows can spread out (name left, light right).
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.width(240.dp)) {
             // Tapping the ring tests both connections; a spinner replaces the light until the result is in.
             StatusLine("LLM", health.llm, checking)
             StatusLine("IMG", health.image, checking)
@@ -199,10 +201,10 @@ private fun ColumnScope.StatusLine(name: String, s: ServerStatus, checking: Bool
     val busy = s != ServerStatus.NOT_SET && (checking || s == ServerStatus.UNKNOWN)
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)
             .semantics(mergeDescendants = true) { contentDescription = "$name: ${if (busy) "checking" else label}" },
     ) {
-        Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.width(48.dp))
+        Text(name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
         Box(Modifier.size(16.dp), contentAlignment = Alignment.Center) {
             if (busy) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
             else Canvas(Modifier.size(14.dp)) { drawCircle(colour) }

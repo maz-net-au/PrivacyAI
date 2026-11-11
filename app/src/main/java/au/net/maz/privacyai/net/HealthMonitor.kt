@@ -63,6 +63,11 @@ class HealthMonitor(
 
     private val lock = Mutex()
 
+    private val _checking = MutableStateFlow(false)
+
+    /** True while a check asked for by the user (tapping the status ring) is running. */
+    val checking: StateFlow<Boolean> = _checking
+
     fun start() {
         scope.launch {
             ProcessLifecycleOwner.get().lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -74,26 +79,39 @@ class HealthMonitor(
         }
     }
 
+    /**
+     * Test both connections now (tapping the status ring). Unlike the background poll,
+     * this waits for a check already running and then checks again, so the result is fresh.
+     */
     fun refreshNow() {
-        scope.launch { probe() }
+        scope.launch {
+            _checking.value = true
+            try {
+                lock.lock()
+                try { check() } finally { lock.unlock() }
+            } finally {
+                _checking.value = false
+            }
+        }
     }
 
+    /** Background poll: skipped if a check is already running. */
     private suspend fun probe() {
         if (!lock.tryLock()) return
-        try {
-            val (llmAddr, imageAddr) = addresses() ?: return
-            coroutineScope {
-                val llmUp = async { if (llmAddr.isBlank()) null else isUp("${baseUrl(llmAddr)}/health") }
-                val imgUp = async { if (imageAddr.isBlank()) null else isUp("${baseUrl(imageAddr)}/system_stats") }
-                val llm = status(llmUp.await())
-                val image = status(imgUp.await())
-                val models = if (llm == ServerStatus.UP) {
-                    llama.listModels(llmAddr).getOrNull() ?: _state.value.models
-                } else _state.value.models
-                _state.value = Health(llm, image, models)
-            }
-        } finally {
-            lock.unlock()
+        try { check() } finally { lock.unlock() }
+    }
+
+    private suspend fun check() {
+        val (llmAddr, imageAddr) = addresses() ?: return
+        coroutineScope {
+            val llmUp = async { if (llmAddr.isBlank()) null else isUp("${baseUrl(llmAddr)}/health") }
+            val imgUp = async { if (imageAddr.isBlank()) null else isUp("${baseUrl(imageAddr)}/system_stats") }
+            val llm = status(llmUp.await())
+            val image = status(imgUp.await())
+            val models = if (llm == ServerStatus.UP) {
+                llama.listModels(llmAddr).getOrNull() ?: _state.value.models
+            } else _state.value.models
+            _state.value = Health(llm, image, models)
         }
     }
 

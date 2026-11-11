@@ -35,6 +35,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -123,7 +125,22 @@ fun StatusRing() {
     val nav = LocalNav.current
     val health by app.health.state.collectAsState()
     val tasks by app.tasks.ids.collectAsState()
+    val checking by app.health.checking.collectAsState()
     var open by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    /** Where a task's work shows: its chat / roleplay, or the generation's media item. */
+    suspend fun routeFor(taskId: String): String? {
+        val (kind, rest) = taskId.substringBefore(':') to taskId.substringAfter(':', "")
+        return when {
+            kind == "reply" && rest.startsWith("rp_") -> Routes.rpChat(rest)
+            kind == "reply" && rest.startsWith("chat_") -> Routes.chat(rest)
+            kind == "impersonate" -> Routes.rpChat(rest)
+            taskId.startsWith("job_") -> app.runner?.mediaForJob(taskId)?.let { Routes.viewer(it) }
+            // Generating a field, a description or a prompt: that screen is already open.
+            else -> null
+        }
+    }
     val colour = when (health.colour) {
         Health.Colour.GREEN -> Color(0xFF2E9E4F)
         Health.Colour.YELLOW -> Color(0xFFE0A800)
@@ -134,13 +151,24 @@ fun StatusRing() {
             Ring(colour, tasks.size)
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            StatusLine("LLM", health.llm)
-            StatusLine("IMG", health.image)
-            Text(
-                if (tasks.isEmpty()) "No tasks running" else "${tasks.size} task${if (tasks.size == 1) "" else "s"} running",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-            )
+            // Tapping the ring tests both connections; "checking..." until the result is in.
+            StatusLine("LLM", health.llm, checking)
+            StatusLine("IMG", health.image, checking)
+            if (tasks.isEmpty()) {
+                Text("No tasks running", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+            } else {
+                // Goes to the longest-running task that has somewhere to go.
+                DropdownMenuItem(
+                    text = { Text("${tasks.size} task${if (tasks.size == 1) "" else "s"} running", style = MaterialTheme.typography.bodySmall) },
+                    onClick = {
+                        scope.launch {
+                            val route = app.tasks.idsOldestFirst().firstNotNullOfOrNull { routeFor(it) }
+                            open = false
+                            if (route != null) nav.navigate(route) { launchSingleTop = true }
+                        }
+                    },
+                )
+            }
             HorizontalDivider()
             DropdownMenuItem(text = { Text("Settings") }, leadingIcon = { Icon(Icons.Filled.Settings, null) }, onClick = {
                 open = false
@@ -154,12 +182,12 @@ fun StatusRing() {
 }
 
 @Composable
-private fun ColumnScope.StatusLine(name: String, s: ServerStatus) {
-    val text = when (s) {
-        ServerStatus.NOT_SET -> "no address set"
-        ServerStatus.UNKNOWN -> "checking"
-        ServerStatus.UP -> "connected"
-        ServerStatus.DOWN -> "not connected"
+private fun ColumnScope.StatusLine(name: String, s: ServerStatus, checking: Boolean) {
+    val text = when {
+        s == ServerStatus.NOT_SET -> "no address set"
+        checking || s == ServerStatus.UNKNOWN -> "checking..."
+        s == ServerStatus.UP -> "connected"
+        else -> "not connected"
     }
     Text("$name: $text", modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
 }

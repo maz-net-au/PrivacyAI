@@ -86,6 +86,9 @@ class ComfyRunner(
     }
 
     /** Cancel the job producing [mediaId], if any. */
+    /** The media item a job is generating into, if [jobId] is a current job. */
+    suspend fun mediaForJob(jobId: String): String? = all().firstOrNull { it.id == jobId }?.mediaId
+
     suspend fun cancelForMedia(mediaId: String) {
         all().filter { it.mediaId == mediaId }.forEach { tasks.cancel(it.id) }
     }

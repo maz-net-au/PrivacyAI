@@ -46,6 +46,9 @@ class TaskManager(private val context: Context, private val scope: CoroutineScop
     /** When the longest-running current task started (wall clock ms), or null if none. */
     fun oldestStart(): Long? = synchronized(entries) { entries.values.minOfOrNull { it.startedAt } }
 
+    /** Current task ids, longest-running first. */
+    fun idsOldestFirst(): List<String> = synchronized(entries) { entries.entries.sortedBy { it.value.startedAt }.map { it.key } }
+
     /** Run [block] as a counted task. A task with the same id is cancelled first. */
     fun launch(id: String, block: suspend CoroutineScope.() -> Unit): Job {
         cancel(id)

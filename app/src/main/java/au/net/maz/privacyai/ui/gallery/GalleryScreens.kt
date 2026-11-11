@@ -48,6 +48,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -230,6 +231,15 @@ fun ViewerScreen(id: String, owner: String, kind: MediaKind?) {
     val pager = rememberPagerState(initialPage = start) { list.size }
     val m = list[pager.currentPage.coerceIn(0, list.lastIndex)]
 
+    // The gallery changes underneath the viewer (new generations go in at the front, finished
+    // or deleted ones move or go), so page numbers shift. Stay on the item being looked at.
+    var currentId by remember { mutableStateOf(id) }
+    LaunchedEffect(pager.currentPage) { list.getOrNull(pager.currentPage)?.let { currentId = it.id } }
+    LaunchedEffect(list.map { it.id }) {
+        val i = list.indexOfFirst { it.id == currentId }
+        if (i >= 0 && i != pager.currentPage) pager.scrollToPage(i)
+    }
+
     val exporter = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("*/*")) { uri ->
         val fileId = m.fileId ?: return@rememberLauncherForActivityResult
         if (uri != null) scope.launch {
@@ -242,8 +252,9 @@ fun ViewerScreen(id: String, owner: String, kind: MediaKind?) {
     }
 
     AppScaffold(title = m.info.workflowName.ifBlank { null } ?: m.kind.label, onBack = { nav.popBackStack() }, snackbar = snackbar) { pad ->
-        HorizontalPager(pager, Modifier.padding(pad).fillMaxSize(), key = { list[it].id }) { page ->
-            val item = list[page]
+        // The pager can ask for a page from just before the list shrank: never index past the end.
+        HorizontalPager(pager, Modifier.padding(pad).fillMaxSize(), key = { list.getOrNull(it)?.id ?: "gone:$it" }) { page ->
+            val item = list.getOrNull(page) ?: return@HorizontalPager
             val actions = @Composable {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
                     OutlinedButton(onClick = {

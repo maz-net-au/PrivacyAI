@@ -16,6 +16,7 @@ It replaces an older app at `/home/maz/src/LLMApp` (package `net.maz.llamachat`)
 - **End changes with the install command** the user runs themselves:
   `! ~/Android/Sdk/platform-tools/adb install -r app/build/outputs/apk/debug/app-debug.apk`
 - **Don't draft feedback or bug reports** to Anthropic.
+- **Don't run `adb` against the user's phone** (no `adb devices`, `adb logcat`, etc.). The user declined this. They paste logs and crash traces themselves.
 
 ## Build and test
 
@@ -60,7 +61,7 @@ Claude's memory for this project (`~/.claude/projects/-home-maz-src-PrivacyAI/me
 
 **LLM**
 - `net/LlamaClient.kt`, `net/Dto.kt`: llama-server streaming chat (SSE) via `ChatRequest`, which has `stop`, `maxTokens` and `ignoreEos`.
-- `net/HealthMonitor.kt`: polls both servers for the status ring and the model list.
+- `net/HealthMonitor.kt`: polls both servers for the status ring and the model list. `refreshNow()` forces a check (used when the status ring is tapped), and `checking` is true while it runs.
 - `llm/Prompts.kt`: every prompt.
   - Roleplay requests use the "Name:" turn prefixes. The stop strings are the user's name plus "\nCharacterName:" for each character.
   - Also holds the character-field / my-description / summary / image-prompt generators (guidance = hint or steer) and `parseSpeaker`.
@@ -72,8 +73,8 @@ Claude's memory for this project (`~/.claude/projects/-home-maz-src-PrivacyAI/me
 **Image generator (ComfyUI)**
 - `net/ComfyClient.kt`, `net/ComfyDto.kt`: queue, history, download. Generation time comes from the history execution timestamps.
 - `comfy/Workflows.kt`, `WorkflowConfig.kt`, `WorkflowPatcher.kt`: installed workflow zips (same format as the old app: `api_workflow.json` + `workflow_config.json` [+ `base_enums.json`]), their form fields, and patching values into the graph.
-- `comfy/ComfyRunner.kt`: runs jobs into placeholder media items and resumes jobs after unlock or a restart.
-- `tasks/Tasks.kt`: `TaskManager`, which counts running server requests for the status ring. `TaskService` is the foreground service with a generic notification and an elapsed-time chronometer.
+- `comfy/ComfyRunner.kt`: runs jobs into placeholder media items and resumes jobs after unlock or a restart. The placeholder's `MediaInfo` (including the spoiler flag) is kept when the result is downloaded. `mediaForJob()` maps a task to its media item.
+- `tasks/Tasks.kt`: `TaskManager`, which counts running server requests for the status ring. `idsOldestFirst()` gives the oldest task first. `TaskService` is the foreground service with a generic notification and an elapsed-time chronometer.
 
 **UI** (`ui/`)
 - `AppRoot.kt`: NavHost and `Routes`. Routes carry ids only, never content. Also the CompositionLocals (`LocalApp`, `LocalStore`, `LocalNav`).
@@ -82,9 +83,14 @@ Claude's memory for this project (`~/.claude/projects/-home-maz-src-PrivacyAI/me
 - `home/HomeScreen.kt`: one `IconRow` per row.
 - `components/`:
   - `TopBar.kt`: `AppScaffold`, the status ring and global menu, and `MenuItem`.
+    - Tapping the ring tests the connections. The menu (240dp wide) shows each server with a traffic light: green connected, red failing, grey not set, and a spinner while checking.
+    - The "N tasks running" item, below a divider, opens the oldest running task (`routeFor(taskId)` maps the task id prefixes `reply:rp_`, `reply:chat_`, `impersonate`, `job_` to a route).
   - `IconRow.kt`, `Fields.kt` (`GenerateField`, `GuidanceDialog`, `DiscardDialog`, `PrivateText`), `Markdown.kt`, `MediaViews.kt` (`MediaThumb`, `MediaFull`, encrypted player), `ZoomableImage.kt`, `ColourPicker.kt`.
 - `chat/ChatParts.kt`: shared chat pieces.
-  - `MessageBubble`: tap shows the action chips; long-press opens the Copy menu.
+  - `MessageBubble`: tap shows the action chips. There is no long-press menu.
+    - Chips are icon-only (`ActionChip`, 48x40dp, the label is the content description) so a row doesn't wrap. Some chips have a long-press action too.
+    - Only the **last** message gets Delete, because deleting an earlier one breaks the turn order the server needs. Earlier messages get Copy (+ Edit in roleplay).
+    - Attachments can be hidden as spoilers (`hiddenAttachments` / `onReveal`). Roleplay message media is always spoilered until tapped.
   - `ChatInput`, `rememberPhotoSources` (device photo picker / file browser / camera), and `FollowNewest` (auto-scroll that follows the newest text, plus the keyboard).
 - `chat/ChatScreens.kt`: the utility chat list and chat.
 - `roleplay/`:
@@ -100,6 +106,8 @@ Claude's memory for this project (`~/.claude/projects/-home-maz-src-PrivacyAI/me
 - `gallery/GalleryScreens.kt`: the gallery grid with All / Images / Audio / Video tabs, and the viewer, which swipes through the gallery.
   - The main gallery hides spoiler / NSFW items unless its eye toggle is on. The toggle resets on opening and on lock.
   - Pickers have their own per-pick eye.
+  - Viewer details: Delete (says **Cancel** while a generation is in progress; it still cancels and deletes), Export, Regenerate; then the prompt, the spoiler switch, settings, and the generation time.
+  - **Pager gotcha:** the `HorizontalPager` key lambda can run with a stale page count while the list shrinks (a generation finishing or being cancelled). Always use `list.getOrNull(i)` in the key and the page content, never `list[i]`. Indexing directly crashed the app with IndexOutOfBounds.
 - `settings/`: General / Roleplay tabs (servers, security, chat, token limits) and the preset editor.
 - `lock/LockScreens.kt`: PIN setup and entry.
 - `theme/`: the theme and per-character bubble colours.
@@ -116,4 +124,13 @@ Claude's memory for this project (`~/.claude/projects/-home-maz-src-PrivacyAI/me
 
 - **Character model in roleplay setup:** the character editor opened from a roleplay's setup screen uses the roleplay's *saved* model. For a new roleplay that is the default chat model, because the setup can't be saved without starting the roleplay. The user was offered a fix (use the setup screen's unsaved model) and hasn't answered.
 - **Attach thumbnail:** "Choose from roleplay gallery" attached the image but showed no thumbnail. A cancellation race in the result handling was fixed, but it is unconfirmed whether that was the cause.
-- **Offered but not built:** roleplay gallery delete warnings for reference images; empty send in the utility chat; a two-part Impersonate button.
+- **Viewer crash** (stacking Regenerate → Generate from an in-progress viewer): fixed with the pager guards above. The user hasn't confirmed it on the device yet.
+- **Offered but not built** (wait for the user to ask):
+  - Roleplay gallery delete warnings for reference images.
+  - Empty send in the utility chat.
+  - A two-part Impersonate button.
+  - Fixing a race in `ComfyRunner.ensureLoop` (unsynchronised; it could submit a job twice).
+  - Edit for utility chat messages (Copy only for now).
+  - Limiting when "Describe images" shows.
+  - Cancel keeping a "Stopped" item instead of deleting it.
+  - Status-menu routes for field-generation tasks (they currently don't navigate).

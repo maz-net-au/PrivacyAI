@@ -292,6 +292,12 @@ fun RoleplayChatScreen(id: String) {
                         attachments.removeAll { it.mediaId == m.id }
                         scope.launch { app.runner?.cancelForMedia(m.id); store.deleteMedia(m.id) }
                     },
+                    onAttach = { m ->
+                        if (attachments.none { it.mediaId == m.id }) attachments += Attachment(m.id, m.info.description)
+                    },
+                    onRegenerate = { m ->
+                        m.info.workflowId?.let { wf -> nav.navigate(Routes.form(wf, m.owner, from = m.id)) }
+                    },
                 )
                 ChatInput(
                     text = input,

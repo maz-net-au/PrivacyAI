@@ -58,7 +58,8 @@ import au.net.maz.privacyai.ui.components.MediaThumb
  * The roleplay's generations that haven't been sent yet, in a strip above the message box.
  * Collapsible (space is tight). Every image starts hidden: tap to show it, then tap to open
  * it. Swipe one up to take it out of the strip (it stays in the roleplay gallery).
- * Long-press: View, Delete. (Attach them with + > Choose from roleplay gallery.)
+ * Long-press: View, Attach (to the next message), Regenerate, Delete. Regenerate opens the
+ * workflow form with this item's values, like Regenerate in the viewer.
  */
 @Composable
 fun GenerationTray(
@@ -71,6 +72,8 @@ fun GenerationTray(
     onView: (Media) -> Unit,
     onDismiss: (Media) -> Unit,
     onDelete: (Media) -> Unit,
+    onAttach: (Media) -> Unit,
+    onRegenerate: (Media) -> Unit,
 ) {
     if (items.isEmpty()) return
     val running = items.count { it.status == MediaStatus.PENDING }
@@ -110,6 +113,8 @@ fun GenerationTray(
                         onView = { onView(m) },
                         onDismiss = { onDismiss(m) },
                         onDelete = { onDelete(m) },
+                        onAttach = { onAttach(m) },
+                        onRegenerate = { onRegenerate(m) },
                     )
                 }
             }
@@ -127,6 +132,8 @@ private fun TrayThumb(
     onView: () -> Unit,
     onDismiss: () -> Unit,
     onDelete: () -> Unit,
+    onAttach: () -> Unit,
+    onRegenerate: () -> Unit,
 ) {
     var menu by remember { mutableStateOf(false) }
     val haptics = LocalHapticFeedback.current
@@ -191,6 +198,9 @@ private fun TrayThumb(
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             if (m.status == MediaStatus.DONE) DropdownMenuItem(text = { Text("View") }, onClick = { menu = false; onView() })
+            if (m.status == MediaStatus.DONE && !attached) DropdownMenuItem(text = { Text("Attach") }, onClick = { menu = false; onAttach() })
+            // Same condition as Regenerate in the viewer: the workflow it came from is known.
+            if (m.info.workflowId != null) DropdownMenuItem(text = { Text("Regenerate") }, onClick = { menu = false; onRegenerate() })
             DropdownMenuItem(
                 text = { Text(if (m.status == MediaStatus.PENDING) "Cancel and delete" else "Delete") },
                 onClick = { menu = false; onDelete() },

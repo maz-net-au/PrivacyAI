@@ -423,11 +423,11 @@ fun ContextReadout(u: au.net.maz.privacyai.data.model.ContextUsage) {
     )
 }
 
-/** Opens a media item full screen. */
+/** Opens a media item full screen; with an [owner], the viewer swipes through that gallery. */
 @Composable
-fun openMedia(): (String) -> Unit {
+fun openMedia(owner: String = ""): (String) -> Unit {
     val nav = LocalNav.current
-    return { id -> nav.navigate(Routes.viewer(id)) }
+    return { id -> nav.navigate(Routes.viewer(id, owner)) }
 }
 
 /**

@@ -213,7 +213,11 @@ fun ViewerScreen(id: String, owner: String, kind: MediaKind?) {
     val showSpoilers by store.showSpoilers.collectAsState()
     // Marked as a spoiler here: stays in view rather than vanishing from under the switch.
     val markedHere = remember { mutableStateListOf<String>() }
-    val list: List<Media>? = if (owner.isBlank()) single?.let { listOf(it) }
+    // Opened on an item that isn't in that gallery (e.g. a chat attachment from elsewhere):
+    // show just that item. Decided once, when the gallery first loads.
+    var notInGallery by remember { mutableStateOf<Boolean?>(null) }
+    if (notInGallery == null && galleryItems != null) notInGallery = galleryItems!!.none { it.id == id }
+    val list: List<Media>? = if (owner.isBlank() || notInGallery == true) single?.let { listOf(it) }
     else galleryItems?.filter {
         (kind == null || it.kind == kind) &&
             (owner != MediaOwner.GALLERY || showSpoilers || !it.info.spoiler || it.id in markedHere)

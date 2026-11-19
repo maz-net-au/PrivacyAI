@@ -212,7 +212,7 @@ fun RoleplayChatScreen(id: String) {
                         onReveal = { revealed += it },
                         pending = m.pending,
                         error = m.error,
-                        onOpenMedia = openMedia(),
+                        onOpenMedia = openMedia(owner), // swipes through the whole roleplay gallery
                         selected = selectedId == m.id,
                         onSelect = { selectedId = if (selectedId == m.id) null else m.id },
                         actions = buildList {

@@ -82,6 +82,7 @@ import au.net.maz.privacyai.ui.kept
 import au.net.maz.privacyai.ui.screenState
 import au.net.maz.privacyai.ui.theme.bubbleColours
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 
 /**
@@ -96,7 +97,10 @@ fun RoleplayChatScreen(id: String) {
     val nav = LocalNav.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val rpState by store.observeRoleplay(id).collectAsState(initial = null)
+    // The last copy loaded, kept with the screen (memory only): coming back from another screen
+    // shows it straight away instead of an empty page until the database answers.
+    val lastRp = screenState("lastRp") { arrayOfNulls<au.net.maz.privacyai.data.model.Roleplay>(1) }
+    val rpState by remember(id) { store.observeRoleplay(id).onEach { lastRp[0] = it } }.collectAsState(initial = lastRp[0])
     val tasks by app.tasks.ids.collectAsState()
     val busy = app.engine.replyTaskId(id) in tasks
     val snackbar = remember { SnackbarHostState() }

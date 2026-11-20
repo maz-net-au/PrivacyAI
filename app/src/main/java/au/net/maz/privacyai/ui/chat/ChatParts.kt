@@ -216,8 +216,19 @@ fun MessageBubble(
         horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
     ) {
         Column(horizontalAlignment = if (isUser) Alignment.End else Alignment.Start) {
+        // A skipped turn (an empty send) is just a thin sliver of your bubble colour until
+        // tapped; the touch area runs a little past it so it can still be hit.
+        val skipped = isUser && answer.isBlank() && think == null && attachments.isEmpty() &&
+            !pending && error == null && versionCount <= 1
         Box {
-            Column(
+            if (skipped && !selected) Box(
+                Modifier
+                    .pointerInput(Unit) { detectTapGestures(onTap = { select() }) }
+                    .padding(vertical = 6.dp)
+                    .size(width = 56.dp, height = 6.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(background),
+            ) else Column(
                 bubbleWidth
                     .clip(RoundedCornerShape(16.dp))
                     .background(background)

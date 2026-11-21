@@ -83,11 +83,13 @@ fun AppScaffold(
     bottomBar: @Composable () -> Unit = {},
     /** Extra top-bar buttons, after the status ring (where the menu would be). */
     actions: @Composable RowScope.() -> Unit = {},
+    /** False hides the top bar (e.g. the viewer's full-screen mode) without rebuilding the content. */
+    showTopBar: Boolean = true,
     content: @Composable (PaddingValues) -> Unit,
 ) {
     Scaffold(
         topBar = {
-            TopAppBar(
+            if (showTopBar) TopAppBar(
                 title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 navigationIcon = {
                     if (onBack != null) {

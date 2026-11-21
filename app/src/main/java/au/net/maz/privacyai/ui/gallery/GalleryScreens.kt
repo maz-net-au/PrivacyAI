@@ -1,6 +1,19 @@
 package au.net.maz.privacyai.ui.gallery
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.graphics.Color
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -255,10 +268,41 @@ fun ViewerScreen(id: String, owner: String, kind: MediaKind?) {
         }
     }
 
-    AppScaffold(title = m.info.workflowName.ifBlank { null } ?: m.kind.label, onBack = { nav.popBackStack() }, snackbar = snackbar) { pad ->
+    // Full screen: tap the picture to show just the media (no bars, text or buttons) and tap
+    // again (or Back) to leave. Swiping still moves through the gallery. The layout below is
+    // the same tree either way, so a playing video keeps playing.
+    var fullScreen by remember { mutableStateOf(false) }
+    BackHandler(enabled = fullScreen) { fullScreen = false }
+    val activity = remember(context) { context.findActivity() }
+    DisposableEffect(fullScreen, activity) {
+        val window = activity?.window
+        val bars = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
+        if (fullScreen) {
+            bars?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            bars?.hide(WindowInsetsCompat.Type.systemBars())
+        }
+        onDispose { bars?.show(WindowInsetsCompat.Type.systemBars()) }
+    }
+    val toggleFull = { fullScreen = !fullScreen }
+
+    AppScaffold(
+        title = m.info.workflowName.ifBlank { null } ?: m.kind.label,
+        onBack = { nav.popBackStack() },
+        snackbar = snackbar,
+        showTopBar = !fullScreen,
+    ) { pad ->
         // The pager can ask for a page from just before the list shrank: never index past the end.
-        HorizontalPager(pager, Modifier.padding(pad).fillMaxSize(), key = { list.getOrNull(it)?.id ?: "gone:$it" }) { page ->
+        HorizontalPager(
+            pager,
+            Modifier
+                .padding(if (fullScreen) PaddingValues(0.dp) else pad)
+                .fillMaxSize()
+                .background(if (fullScreen) Color.Black else Color.Transparent),
+            key = { list.getOrNull(it)?.id ?: "gone:$it" },
+        ) { page ->
             val item = list.getOrNull(page) ?: return@HorizontalPager
+            // Audio has no picture to fill the screen with.
+            val onTap: (() -> Unit)? = if (item.kind == MediaKind.AUDIO) null else toggleFull
             val actions = @Composable {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
                     OutlinedButton(onClick = {
@@ -289,27 +333,49 @@ fun ViewerScreen(id: String, owner: String, kind: MediaKind?) {
                     scope.launch { store.updateMedia(item.id) { it.copy(info = it.info.copy(spoiler = on)) } }
                 })
             }
+            val scroll = rememberScrollState()
+            LaunchedEffect(fullScreen) { if (fullScreen) scroll.scrollTo(0) }
+            CompositionLocalProvider(LocalContentColor provides if (fullScreen) Color.White else LocalContentColor.current) {
             BoxWithConstraints(Modifier.fillMaxSize()) {
+                val screenHeight = maxHeight
                 if (maxWidth > maxHeight) {
                     Row(Modifier.fillMaxSize()) {
-                        MediaFull(item, Modifier.weight(1.4f).fillMaxHeight())
-                        Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(12.dp)) { details() }
+                        MediaFull(item, Modifier.weight(if (fullScreen) 1f else 1.4f).fillMaxHeight(), onTap = onTap, fill = fullScreen)
+                        if (!fullScreen) {
+                            Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(scroll).padding(12.dp)) { details() }
+                        }
                     }
                 } else {
-                    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                    Column(Modifier.fillMaxSize().verticalScroll(scroll, enabled = !fullScreen)) {
                         // Images: full width, as tall as their shape needs (capped at square).
+                        // Full screen: the whole screen, for images and videos.
                         MediaFull(
                             item,
-                            if (item.kind == MediaKind.IMAGE) Modifier.fillMaxWidth()
-                            else Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 560.dp),
-                            fitWidth = true,
+                            when {
+                                fullScreen -> Modifier.fillMaxWidth().height(screenHeight)
+                                item.kind == MediaKind.IMAGE -> Modifier.fillMaxWidth()
+                                else -> Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 560.dp)
+                            },
+                            fitWidth = !fullScreen,
+                            onTap = onTap,
+                            fill = fullScreen,
                         )
-                        Column(Modifier.padding(12.dp)) { details() }
+                        if (!fullScreen) Column(Modifier.padding(12.dp)) { details() }
                     }
                 }
             }
+            }
         }
     }
+}
+
+private fun Context.findActivity(): Activity? {
+    var c: Context? = this
+    while (c is ContextWrapper) {
+        if (c is Activity) return c
+        c = c.baseContext
+    }
+    return null
 }
 
 @Composable

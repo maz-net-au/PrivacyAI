@@ -6,11 +6,13 @@ import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -42,10 +44,37 @@ fun ZoomableImage(
     modifier: Modifier = Modifier,
     /** Called with the image's width / height once it has loaded. */
     onAspect: (Float) -> Unit = {},
+    /** Single tap (e.g. the viewer's full-screen toggle). */
+    onTap: (() -> Unit)? = null,
+) {
+    ZoomableBox(modifier.fillMaxSize(), onTap) {
+        AsyncImage(
+            model = model,
+            contentDescription = contentDescription,
+            contentScale = ContentScale.Fit,
+            onSuccess = { s ->
+                val size = s.painter.intrinsicSize
+                if (size.width > 0f && size.height > 0f) onAspect(size.width / size.height)
+            },
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
+}
+
+/**
+ * The zoom / pan / double-tap handling of [ZoomableImage], around any content (also used
+ * for video). The content is scaled as a whole and clipped to this box.
+ */
+@Composable
+fun ZoomableBox(
+    modifier: Modifier = Modifier,
+    onTap: (() -> Unit)? = null,
+    content: @Composable BoxScope.() -> Unit,
 ) {
     var scale by remember { mutableStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var boxSize by remember { mutableStateOf(IntSize.Zero) }
+    val tap by rememberUpdatedState(onTap)
 
     fun clamp(o: Offset, s: Float): Offset {
         val maxX = boxSize.width * (s - 1f) / 2f
@@ -55,7 +84,6 @@ fun ZoomableImage(
 
     Box(
         modifier
-            .fillMaxSize()
             .clipToBounds()
             .onSizeChanged { boxSize = it }
             .pointerInput(Unit) {
@@ -77,26 +105,22 @@ fun ZoomableImage(
                 }
             }
             .pointerInput(Unit) {
-                detectTapGestures(onDoubleTap = {
-                    if (scale > 1f) {
-                        scale = 1f
-                        offset = Offset.Zero
-                    } else {
-                        scale = 2.5f
-                    }
-                })
+                detectTapGestures(
+                    onTap = { tap?.invoke() },
+                    onDoubleTap = {
+                        if (scale > 1f) {
+                            scale = 1f
+                            offset = Offset.Zero
+                        } else {
+                            scale = 2.5f
+                        }
+                    },
+                )
             },
         contentAlignment = Alignment.Center,
     ) {
-        AsyncImage(
-            model = model,
-            contentDescription = contentDescription,
-            contentScale = ContentScale.Fit,
-            onSuccess = { s ->
-                val size = s.painter.intrinsicSize
-                if (size.width > 0f && size.height > 0f) onAspect(size.width / size.height)
-            },
-            modifier = Modifier
+        Box(
+            Modifier
                 .fillMaxSize()
                 .graphicsLayer {
                     scaleX = scale
@@ -104,6 +128,8 @@ fun ZoomableImage(
                     translationX = offset.x
                     translationY = offset.y
                 },
+            contentAlignment = Alignment.Center,
+            content = content,
         )
     }
 }

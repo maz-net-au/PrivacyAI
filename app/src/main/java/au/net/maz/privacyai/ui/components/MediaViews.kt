@@ -34,6 +34,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -84,7 +87,15 @@ fun MediaThumb(media: Media?, modifier: Modifier = Modifier) {
  * full width, height from the image's shape, but no taller than it is wide (so tall
  * images get space at the sides instead).
  */
-fun MediaFull(media: Media, modifier: Modifier = Modifier, fitWidth: Boolean = false) {
+fun MediaFull(
+    media: Media,
+    modifier: Modifier = Modifier,
+    fitWidth: Boolean = false,
+    /** Single tap on the image / video picture (not the player controls). */
+    onTap: (() -> Unit)? = null,
+    /** Video: take all of [modifier]'s height, with the controls at the bottom (full screen). */
+    fill: Boolean = false,
+) {
     val fileId = media.fileId
     when {
         media.status == MediaStatus.PENDING -> Box(modifier, contentAlignment = Alignment.Center) {
@@ -95,10 +106,10 @@ fun MediaFull(media: Media, modifier: Modifier = Modifier, fitWidth: Boolean = f
         }
         media.kind == MediaKind.IMAGE && fitWidth -> {
             var aspect by remember(fileId) { mutableFloatStateOf(1f) }
-            ZoomableImage(MediaRef(fileId), null, modifier.aspectRatio(maxOf(aspect, 1f)), onAspect = { aspect = it })
+            ZoomableImage(MediaRef(fileId), null, modifier.aspectRatio(maxOf(aspect, 1f)), onAspect = { aspect = it }, onTap = onTap)
         }
-        media.kind == MediaKind.IMAGE -> ZoomableImage(MediaRef(fileId), null, modifier)
-        else -> EncryptedPlayer(fileId, video = media.kind == MediaKind.VIDEO, modifier = modifier)
+        media.kind == MediaKind.IMAGE -> ZoomableImage(MediaRef(fileId), null, modifier, onTap = onTap)
+        else -> EncryptedPlayer(fileId, video = media.kind == MediaKind.VIDEO, modifier = modifier, onTap = onTap, fill = fill)
     }
 }
 
@@ -108,7 +119,14 @@ fun MediaFull(media: Media, modifier: Modifier = Modifier, fitWidth: Boolean = f
  * muted, with an unmute button.
  */
 @Composable
-fun EncryptedPlayer(fileId: String, video: Boolean, modifier: Modifier = Modifier) {
+fun EncryptedPlayer(
+    fileId: String,
+    video: Boolean,
+    modifier: Modifier = Modifier,
+    onTap: (() -> Unit)? = null,
+    fill: Boolean = false,
+) {
+    val tap by rememberUpdatedState(onTap)
     val store = LocalApp.current.session.store ?: return
     val player = remember(fileId) { MediaPlayer() }
     var prepared by remember { mutableStateOf(false) }
@@ -150,7 +168,16 @@ fun EncryptedPlayer(fileId: String, video: Boolean, modifier: Modifier = Modifie
             // The video takes whatever height is left after the controls (weighted children are
             // measured last), and fits its shape inside that. Before, it always took the full
             // width, so a tall (portrait) video pushed the play / mute row out of the box.
-            Box(Modifier.weight(1f, fill = false).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            // Pinch to zoom and double-tap work on the picture as they do on images.
+            Box(
+                Modifier
+                    .weight(1f, fill = fill)
+                    .fillMaxWidth()
+                    // Taps on the space around the picture (full screen) count too.
+                    .pointerInput(Unit) { detectTapGestures(onTap = { tap?.invoke() }) },
+                contentAlignment = Alignment.Center,
+            ) {
+            ZoomableBox(Modifier.aspectRatio(aspect), onTap = { tap?.invoke() }) {
             AndroidView(
                 factory = { ctx ->
                     TextureView(ctx).apply {
@@ -170,8 +197,9 @@ fun EncryptedPlayer(fileId: String, video: Boolean, modifier: Modifier = Modifie
                         }
                     }
                 },
-                modifier = Modifier.aspectRatio(aspect),
+                modifier = Modifier.fillMaxSize(),
             )
+            }
             }
         } else {
             Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {

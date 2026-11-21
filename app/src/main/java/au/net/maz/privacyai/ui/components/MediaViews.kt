@@ -147,6 +147,10 @@ fun EncryptedPlayer(fileId: String, video: Boolean, modifier: Modifier = Modifie
 
     Column(modifier, verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center) {
         if (video) {
+            // The video takes whatever height is left after the controls (weighted children are
+            // measured last), and fits its shape inside that. Before, it always took the full
+            // width, so a tall (portrait) video pushed the play / mute row out of the box.
+            Box(Modifier.weight(1f, fill = false).fillMaxWidth(), contentAlignment = Alignment.Center) {
             AndroidView(
                 factory = { ctx ->
                     TextureView(ctx).apply {
@@ -166,8 +170,9 @@ fun EncryptedPlayer(fileId: String, video: Boolean, modifier: Modifier = Modifie
                         }
                     }
                 },
-                modifier = Modifier.fillMaxWidth().aspectRatio(aspect),
+                modifier = Modifier.aspectRatio(aspect),
             )
+            }
         } else {
             Box(Modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) {
                 Icon(Icons.Filled.AudioFile, null, modifier = Modifier.size(72.dp))

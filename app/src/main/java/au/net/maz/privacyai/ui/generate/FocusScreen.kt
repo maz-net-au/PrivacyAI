@@ -40,7 +40,7 @@ import kotlinx.coroutines.CancellationException
  * The focus says what the image should be about. The context is the character when
  * generating a character's image ([ctx]), otherwise the roleplay (if any).
  * The result can be edited, and refined with a change request. The model defaults to
- * the roleplay's model, since switching models takes time.
+ * the roleplay's image description model (which falls back to its chat model).
  */
 @Composable
 fun FocusScreen(owner: String, resultKey: String, ctx: String) {
@@ -64,7 +64,7 @@ fun FocusScreen(owner: String, resultKey: String, ctx: String) {
     LaunchedEffect(Unit) {
         if (loaded) return@LaunchedEffect
         rp = rpId?.let { store.roleplay(it) }
-        model = rp?.model?.ifBlank { null } ?: store.settings().chatModel.ifBlank { null }
+        model = rp?.effectiveDescriptionModel?.ifBlank { null } ?: store.settings().chatModel.ifBlank { null }
         prompt = app.results.take<String>("init:$resultKey").orEmpty()
         loaded = true
     }

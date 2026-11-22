@@ -19,7 +19,9 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AudioFile
 import androidx.compose.material.icons.filled.Image
@@ -86,6 +88,7 @@ import au.net.maz.privacyai.ui.components.MediaThumb
 import au.net.maz.privacyai.ui.components.MenuItem
 import au.net.maz.privacyai.ui.kept
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -219,7 +222,8 @@ fun ViewerScreen(id: String, owner: String, kind: MediaKind?) {
     val snackbar = remember { SnackbarHostState() }
 
     // The items to swipe through: the gallery (as its tab showed it), or just this one.
-    val single by store.observeMediaItem(id).collectAsState(initial = null)
+    // Just the opened item: null while loading, empty once it's gone (deleted).
+    val single by remember(id) { store.observeMediaItem(id).map { listOfNotNull(it) } }.collectAsState(initial = null)
     val galleryItems by remember(owner) {
         if (owner.isBlank()) kotlinx.coroutines.flow.flowOf(null) else store.observeMedia(owner)
     }.collectAsState(initial = null)
@@ -227,13 +231,21 @@ fun ViewerScreen(id: String, owner: String, kind: MediaKind?) {
     // Marked as a spoiler here: stays in view rather than vanishing from under the switch.
     val markedHere = remember { mutableStateListOf<String>() }
     // Opened on an item that isn't in that gallery (e.g. a chat attachment from elsewhere):
-    // show just that item. Decided once, when the gallery first loads.
-    var notInGallery by remember { mutableStateOf<Boolean?>(null) }
+    // show just that item. Decided once, when the gallery first loads, and kept while away
+    // (e.g. on Regenerate's form). It used to be decided again on coming back, and if the
+    // item the viewer was opened on had been deleted meanwhile, it then waited for that
+    // missing item forever: an empty page with no title.
+    var notInGallery by kept<Boolean?>("notInGallery") { null }
     if (notInGallery == null && galleryItems != null) notInGallery = galleryItems!!.none { it.id == id }
-    val list: List<Media>? = if (owner.isBlank() || notInGallery == true) single?.let { listOf(it) }
-    else galleryItems?.filter {
+    val gallery = galleryItems?.filter {
         (kind == null || it.kind == kind) &&
             (owner != MediaOwner.GALLERY || showSpoilers || !it.info.spoiler || it.id in markedHere)
+    }
+    val list: List<Media>? = when {
+        owner.isBlank() -> single
+        // The lone item has gone: show the gallery rather than nothing.
+        notInGallery == true -> if (single?.isEmpty() == true) gallery else single
+        else -> gallery
     }
     if (list == null) {
         AppScaffold(title = "", onBack = { nav.popBackStack() }) {}
@@ -244,13 +256,20 @@ fun ViewerScreen(id: String, owner: String, kind: MediaKind?) {
         return
     }
 
-    val start = remember { list.indexOfFirst { it.id == id }.coerceAtLeast(0) }
-    val pager = rememberPagerState(initialPage = start) { list.size }
+    // The item being looked at, kept while away (e.g. on Regenerate's form). Coming back used
+    // to restore the old page *number*, which after a new generation went in at the front
+    // pointed at a different item (or a blank page) instead of the one you were on.
+    var currentId by kept("currentId") { id }
+    // Regenerate's form hands back the new (in-progress) item: show that on return.
+    val regenKey by kept("regenKey") { Routes.newResultKey() }
+    app.results.take<String>(regenKey)?.let { newId -> if (list.any { it.id == newId }) currentId = newId }
+
+    val pageCount by rememberUpdatedState(list.size)
+    val pager = remember { ViewerPagerState(list.indexOfFirst { it.id == currentId }.coerceAtLeast(0)) { pageCount } }
     val m = list[pager.currentPage.coerceIn(0, list.lastIndex)]
 
     // The gallery changes underneath the viewer (new generations go in at the front, finished
     // or deleted ones move or go), so page numbers shift. Stay on the item being looked at.
-    var currentId by remember { mutableStateOf(id) }
     LaunchedEffect(pager.currentPage) { list.getOrNull(pager.currentPage)?.let { currentId = it.id } }
     LaunchedEffect(list.map { it.id }) {
         val i = list.indexOfFirst { it.id == currentId }
@@ -324,7 +343,7 @@ fun ViewerScreen(id: String, owner: String, kind: MediaKind?) {
                         exporter.launch("privacyai-${item.createdAt}.${ComfyRunner.extFor(item.mime)}")
                     }) { Text("Export") }
                     val wf = item.info.workflowId
-                    if (wf != null) OutlinedButton(onClick = { nav.navigate(Routes.form(wf, item.owner, from = item.id)) }) { Text("Regenerate") }
+                    if (wf != null) OutlinedButton(onClick = { nav.navigate(Routes.form(wf, item.owner, from = item.id, result = regenKey)) }) { Text("Regenerate") }
                 }
             }
             val details = @Composable {
@@ -367,6 +386,15 @@ fun ViewerScreen(id: String, owner: String, kind: MediaKind?) {
             }
         }
     }
+}
+
+/**
+ * A pager state that isn't put in saved state: it starts where it's told every time the
+ * viewer is shown, instead of restoring a page number that may now be a different item.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+private class ViewerPagerState(page: Int, private val count: () -> Int) : PagerState(page, 0f) {
+    override val pageCount: Int get() = count()
 }
 
 private fun Context.findActivity(): Activity? {

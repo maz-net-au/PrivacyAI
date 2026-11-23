@@ -54,9 +54,16 @@ object Prompts {
         }.trim()
     }
 
-    /** The conversation as plain "Name: text" lines (reasoning removed). */
-    fun transcript(rp: Roleplay, upTo: Int = rp.messages.size): String = buildString {
-        rp.messages.take(upTo).forEach { m ->
+    /**
+     * The conversation as plain "Name: text" lines (reasoning removed). Summarised (locked)
+     * messages are left out unless [includeLocked]: the summary in the background stands in
+     * for them, as it does for replies.
+     */
+    fun transcript(rp: Roleplay, upTo: Int = rp.messages.size, includeLocked: Boolean = false): String =
+        transcriptOf(rp, rp.messages.take(upTo).filter { includeLocked || !it.locked })
+
+    private fun transcriptOf(rp: Roleplay, messages: List<Message>): String = buildString {
+        messages.forEach { m ->
             if (m.pending || m.text.isBlank()) return@forEach
             appendLine("${speakerName(rp, m)}: ${stripThink(m.text)}")
         }
@@ -282,6 +289,52 @@ object Prompts {
             append(" Output only the summary.")
         }
         return fixed(model, "You summarise roleplay stories accurately and concisely.", turn, maxTokens = maxTokens)
+    }
+
+    /** "Summarise & continue": the newest messages that stay unsummarised (3 each way). */
+    const val KEEP_RECENT = 6
+
+    /**
+     * "Summarise & continue" (the old app's fold): the previous summary plus the messages
+     * being locked now ([older]), rewritten as one summary. Prompt and sampling are the
+     * old app's (low temperature, so a hot roleplay preset can't make it florid).
+     */
+    fun foldSummary(rp: Roleplay, older: List<Message>, model: String, maxTokens: Int): ChatRequest {
+        val system =
+            "You are a summarizer that compacts a long chat so it can continue without its " +
+                "full history. Produce a single, information-dense summary of everything that has " +
+                "happened so far, small enough to fit comfortably in a few thousand tokens. When a " +
+                "previous summary is provided, fold the new messages into it without losing any " +
+                "earlier facts. Preserve concrete details needed to continue coherently: names, " +
+                "goals, decisions, unresolved threads, and the setting. Write in neutral past tense. " +
+                "Output only the summary text, with no preamble or commentary.\n\n" +
+                "This is a roleplay between named characters. Be sure to capture: the " +
+                "relationships between the characters and how they've changed; what the characters " +
+                "have been through together; and each character's current state, especially " +
+                "permanent changes that have occurred (e.g. an injury such as a lost limb, a death, " +
+                "a new possession, a shift in location or allegiance). These persist for the rest of " +
+                "the story."
+        val user = buildString {
+            if (rp.summaryBackground.isNotBlank()) {
+                appendLine("Previous summary:")
+                appendLine(rp.summaryBackground.trim())
+                appendLine()
+                appendLine("New messages since then:")
+            }
+            appendLine(transcriptOf(rp, older))
+            appendLine()
+            append("Write the updated summary now, incorporating everything above.")
+        }
+        return ChatRequest(
+            model = model,
+            messages = listOf(apiText("system", system), apiText("user", user)),
+            stream = true,
+            maxTokens = maxTokens,
+            temperature = 0.3,
+            topP = 0.9,
+            topK = 40,
+            repeatPenalty = 1.1,
+        )
     }
 
     /**

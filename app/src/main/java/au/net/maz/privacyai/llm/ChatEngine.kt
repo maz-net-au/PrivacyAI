@@ -178,7 +178,7 @@ class ChatEngine(private val app: PrivacyApp) {
             Mode.NEW -> rp.messages
             Mode.REGENERATE -> rp.messages.take(target!!)
             Mode.CONTINUE -> rp.messages.take(target!! + 1)
-        }
+        }.filter { !it.locked } // summarised: the summary in the system prompt stands in for them
         // Regenerate keeps the same speaker; Continue carries on the same message.
         val forced: Character? = when (mode) {
             Mode.NEW -> speakerId?.let { rp.character(it) }
@@ -293,8 +293,9 @@ class ChatEngine(private val app: PrivacyApp) {
         // llama-server only continues a trailing assistant message, so the user's "Name:"
         // goes onto the end of the last character message and the model carries on from it.
         // No trailing space after the colon: that makes some models end the turn at once.
-        val foldInto = last?.takeIf { !it.isUser && it.attachments.isEmpty() }
-        val earlier = if (foldInto != null) rp.messages.filter { it.id != foldInto.id && !it.pending } else rp.messages
+        val foldInto = last?.takeIf { !it.isUser && it.attachments.isEmpty() && !it.locked }
+        val open = rp.messages.filter { !it.locked } // summarised messages aren't sent
+        val earlier = if (foldInto != null) open.filter { it.id != foldInto.id && !it.pending } else open
         val history = buildHistory(earlier, model, rp.attachedImagesSent, { if (it.isUser) "user" else "assistant" }) { m ->
             if (m.isUser) stripThink(m.text) else Prompts.assistantText(rp, m)
         }.toMutableList()
@@ -329,17 +330,62 @@ class ChatEngine(private val app: PrivacyApp) {
         return ContextUsage(tokens = tokens, limit = limit, model = model)
     }
 
+    // ---- summarise & continue ---------------------------------------------------------
+
+    fun summariseTaskId(rpId: String) = "summarise:$rpId"
+
+    private val _summarising = MutableStateFlow<Map<String, String>>(emptyMap())
+
+    /** Summaries being written, by roleplay id, with the text so far (for the chat's banner). */
+    val summarising: StateFlow<Map<String, String>> = _summarising
+
+    /**
+     * "Summarise & continue" (from the old app): everything but the newest
+     * [Prompts.KEEP_RECENT] messages is folded into the story summary and locked, so it's
+     * no longer sent. The summary and the locks are saved together, only on success.
+     */
+    fun summariseRoleplay(rpId: String, onDone: (Throwable?) -> Unit): Job {
+        var lockIds = emptySet<String>()
+        _summarising.update { it + (rpId to "") }
+        return complete(
+            taskId = summariseTaskId(rpId),
+            request = {
+                val rp = store.roleplay(rpId) ?: error("Roleplay not found")
+                val older = rp.messages.dropLast(Prompts.KEEP_RECENT).filter { !it.locked && !it.pending }
+                require(older.isNotEmpty()) { "Nothing to summarise yet: the newest ${Prompts.KEEP_RECENT} messages are always kept." }
+                lockIds = older.map { it.id }.toSet()
+                Prompts.foldSummary(rp, older, rp.model.ifBlank { defaultModel() }, store.settings().summaryMaxTokens)
+            },
+            onText = { t -> _summarising.update { it + (rpId to t) } },
+            onAnswer = { summary ->
+                store.updateRoleplay(rpId) { r ->
+                    r.copy(
+                        updatedAt = System.currentTimeMillis(),
+                        summaryBackground = summary,
+                        messages = r.messages.map { if (it.id in lockIds) it.copy(locked = true) else it },
+                    )
+                }
+            },
+            onDone = { e ->
+                _summarising.update { it - rpId }
+                onDone(e)
+            },
+        )
+    }
+
     // ---- one-shot requests (Generate buttons, image prompts) ------------------------------
 
     /**
      * Stream a one-shot request as a counted task. [onText] gets the full text so far
-     * (reasoning removed). [onDone] gets null on success, or the error.
+     * (reasoning removed). [onAnswer] gets the final text and runs inside the task (for
+     * saving it). [onDone] gets null on success, or the error.
      */
     fun complete(
         taskId: String,
         request: suspend () -> ChatRequest,
         onText: (String) -> Unit,
         onDone: (Throwable?) -> Unit,
+        onAnswer: suspend (String) -> Unit = {},
     ): Job = app.tasks.launch(taskId) {
         try {
             val req = request()
@@ -354,7 +400,7 @@ class ChatEngine(private val app: PrivacyApp) {
             }
             val answer = stripThink(sb.toString()).trim()
             when {
-                answer.isNotEmpty() -> { onText(answer); onDone(null) }
+                answer.isNotEmpty() -> { onText(answer); onAnswer(answer); onDone(null) }
                 sb.isNotBlank() -> onDone(IllegalStateException(
                     "The model only produced reasoning, no answer (it may have run out of tokens). Nothing was changed.",
                 ))

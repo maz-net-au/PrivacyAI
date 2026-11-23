@@ -35,6 +35,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
@@ -102,7 +105,9 @@ fun RoleplayChatScreen(id: String) {
     val lastRp = screenState("lastRp") { arrayOfNulls<au.net.maz.privacyai.data.model.Roleplay>(1) }
     val rpState by remember(id) { store.observeRoleplay(id).onEach { lastRp[0] = it } }.collectAsState(initial = lastRp[0])
     val tasks by app.tasks.ids.collectAsState()
-    val busy = app.engine.replyTaskId(id) in tasks
+    val summarising = app.engine.summariseTaskId(id) in tasks
+    // A reply or a summary being written: nothing that changes the messages is offered.
+    val busy = app.engine.replyTaskId(id) in tasks || summarising
     val snackbar = remember { SnackbarHostState() }
 
     var input by kept("input") { "" }
@@ -140,7 +145,7 @@ fun RoleplayChatScreen(id: String) {
         if (uri != null) scope.launch {
             runCatching {
                 context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { w ->
-                    w.write("${rp.title}\n\n${Prompts.transcript(rp)}\n")
+                    w.write("${rp.title}\n\n${Prompts.transcript(rp, includeLocked = true)}\n")
                 }
             }.onSuccess { snackbar.showSnackbar("Exported") }.onFailure { snackbar.showSnackbar("Export failed") }
         }
@@ -155,6 +160,8 @@ fun RoleplayChatScreen(id: String) {
     val messages = if (live.isEmpty()) rp.messages else rp.messages.map { m -> live[m.id]?.takeIf { m.pending } ?: m }
     // Show the newest text as it's written.
     FollowNewest(listState, messages.size, messages.lastOrNull()?.text?.length ?: 0)
+    // Summarised messages are always the oldest ones; a divider goes after the last of them.
+    val lockedCount = messages.indexOfLast { it.locked } + 1
 
     AppScaffold(
         title = rp.title.ifBlank { "Roleplay" },
@@ -163,6 +170,30 @@ fun RoleplayChatScreen(id: String) {
         menu = listOf(
             MenuItem("Edit chat details") { nav.navigate(Routes.rpSetup(id)) },
             MenuItem("Roleplay gallery") { nav.navigate(Routes.gallery(owner)) },
+            MenuItem("Summarise & continue") {
+                scope.launch {
+                    when {
+                        busy || "impersonate:$id" in tasks -> snackbar.showSnackbar("Wait for the reply to finish first")
+                        rp.messages.dropLast(Prompts.KEEP_RECENT).none { !it.locked } ->
+                            snackbar.showSnackbar("Nothing to summarise yet: the newest ${Prompts.KEEP_RECENT} messages are always kept")
+                        else -> {
+                            val r = snackbar.showSnackbar(
+                                "Fold the older messages into the story summary? They'll be locked and no longer sent.",
+                                actionLabel = "Summarise", withDismissAction = true,
+                            )
+                            if (r == SnackbarResult.ActionPerformed) app.engine.summariseRoleplay(id) { e ->
+                                when {
+                                    e == null -> scope.launch {
+                                        val done = snackbar.showSnackbar("Summarised", actionLabel = "View summary", withDismissAction = true)
+                                        if (done == SnackbarResult.ActionPerformed) nav.navigate(Routes.rpSetup(id))
+                                    }
+                                    e !is CancellationException -> scope.launch { snackbar.showSnackbar(e.message ?: "Summarise failed") }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
             MenuItem("Export conversation") { exporter.launch("${rp.title.ifBlank { "roleplay" }}.txt") },
             MenuItem("Delete roleplay") {
                 scope.launch {
@@ -178,7 +209,8 @@ fun RoleplayChatScreen(id: String) {
     ) { pad ->
         Column(Modifier.padding(pad).fillMaxSize().imePadding()) {
             LazyColumn(state = listState, modifier = Modifier.weight(1f), contentPadding = PaddingValues(vertical = 8.dp)) {
-                items(messages, key = { it.id }) { m ->
+                itemsIndexed(messages, key = { _, m -> m.id }) { index, m -> Column {
+                    if (index == lockedCount && index > 0) SummarisedDivider()
                     val ch = rp.character(m.speaker)
                     val isLast = m.id == messages.lastOrNull()?.id
                     val colours = ch?.let { bubbleColours(it.colour) }
@@ -195,12 +227,13 @@ fun RoleplayChatScreen(id: String) {
                                 editing = null
                             },
                         )
-                        return@items
+                        return@Column
                     }
                     MessageBubble(
                         roleplayWidths = true,
-                        versionIndex = m.active,
-                        versionCount = m.versions.size,
+                        // Summarised messages are frozen: only the version that was summarised.
+                        versionIndex = if (m.locked) 0 else m.active,
+                        versionCount = if (m.locked) 1 else m.versions.size,
                         onVersion = { i ->
                             scope.launch { store.updateRoleplay(id) { r -> r.copy(messages = r.messages.map { if (it.id == m.id) it.showVersion(i) else it }) } }
                         },
@@ -221,6 +254,11 @@ fun RoleplayChatScreen(id: String) {
                         onSelect = { selectedId = if (selectedId == m.id) null else m.id },
                         actions = buildList {
                             val copy = MenuItem("Copy", Icons.Filled.ContentCopy) { selectedId = null; copyText(context, stripThink(m.text)) }
+                            if (m.locked) {
+                                // Summarised: frozen, copy only.
+                                add(copy)
+                                return@buildList
+                            }
                             if (!isLast) {
                                 // Earlier messages: deleting one would break the turn order the server needs.
                                 add(copy)
@@ -260,7 +298,8 @@ fun RoleplayChatScreen(id: String) {
                             })
                         },
                     )
-                }
+                } }
+                if (lockedCount == messages.size && lockedCount > 0) item(key = "summarised") { SummarisedDivider() }
             }
             // While a message is being edited (in place, above), the input is hidden for room.
             if (editing == null) {
@@ -275,6 +314,10 @@ fun RoleplayChatScreen(id: String) {
                         it.id !in rp.trayDismissed
                 }
                 val settings by store.settings.collectAsState(initial = null)
+                if (summarising) {
+                    val progress = app.engine.summarising.collectAsState().value[id].orEmpty()
+                    SummarisingBanner(progress) { app.tasks.cancel(app.engine.summariseTaskId(id)) }
+                }
                 GenerationTray(
                     items = unsent,
                     open = settings?.generationTrayOpen ?: true,
@@ -325,7 +368,7 @@ fun RoleplayChatScreen(id: String) {
                         attachments.clear()
                         app.engine.sendRoleplay(id, text, atts, speaker)
                     },
-                    onStop = { app.engine.stop(id); app.tasks.cancel("impersonate:$id") },
+                    onStop = { app.engine.stop(id); app.tasks.cancel("impersonate:$id"); app.tasks.cancel(app.engine.summariseTaskId(id)) },
                     usage = rp.usage,
                     buttons = {
                         // Impersonate: the LLM writes your next line (continuing anything typed).
@@ -455,5 +498,38 @@ private fun EditInPlace(
             TextButton(onClick = onCancel) { Text("Cancel") }
             TextButton(onClick = onSave) { Text("Save") }
         }
+    }
+}
+
+/** Between the summarised (locked) messages above and the ones still sent below. */
+@Composable
+private fun SummarisedDivider() {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        HorizontalDivider(Modifier.weight(1f))
+        Text(
+            "summarised",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 10.dp),
+        )
+        HorizontalDivider(Modifier.weight(1f))
+    }
+}
+
+/** While "Summarise & continue" runs: the summary so far (two lines) and Cancel. */
+@Composable
+private fun SummarisingBanner(progress: String, onCancel: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.secondaryContainer)
+            .padding(start = 12.dp, top = 6.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+        Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
+            Text("Summarising\u2026", style = MaterialTheme.typography.labelLarge)
+            if (progress.isNotBlank()) Text(progress, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+        TextButton(onClick = onCancel) { Text("Cancel") }
     }
 }

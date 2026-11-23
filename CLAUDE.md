@@ -96,6 +96,7 @@ Claude's memory for this project (`~/.claude/projects/-home-maz-src-PrivacyAI/me
 - `roleplay/`:
   - `RoleplayScreens.kt`: the list and setup screen.
   - `RoleplayChat.kt`: the chat. Speaker chips, impersonate, in-place edit, plus menu.
+    - **Summarise & continue** (menu): folds all but the newest 6 messages (`Prompts.KEEP_RECENT`) into `summaryBackground` and marks them `Message.locked`. Locked messages are never sent (replies, impersonate, `Prompts.transcript`), show Copy only, and sit above a "summarised" divider. Export still includes them.
   - `GenerationTray.kt`: unsent generations. Spoilered at first; tap reveals, tap again opens; swipe up dismisses (`Roleplay.trayDismissed`); long-press offers View / Delete.
 - `characters/CharacterScreens.kt`: character list and editor, used both for the main list and inside a roleplay. Includes YAML import and reference images.
 - `generate/`:

@@ -144,6 +144,7 @@ fun StatusRing() {
             kind == "reply" && rest.startsWith("rp_") -> Routes.rpChat(rest)
             kind == "reply" && rest.startsWith("chat_") -> Routes.chat(rest)
             kind == "impersonate" -> Routes.rpChat(rest)
+            kind == "summarise" -> Routes.rpChat(rest)
             taskId.startsWith("job_") -> app.runner?.mediaForJob(taskId)?.let { Routes.viewer(it) }
             // Generating a field, a description or a prompt: that screen is already open.
             else -> null

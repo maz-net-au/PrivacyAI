@@ -92,6 +92,12 @@ data class Message(
      */
     val variants: List<String> = emptyList(),
     val active: Int = 0,
+    /**
+     * Roleplay: folded into the story summary by "Summarise & continue". Locked messages
+     * are no longer sent to the model (the summary stands in for them) and can't be
+     * changed. They're always the oldest messages.
+     */
+    val locked: Boolean = false,
 ) {
     val isUser: Boolean get() = speaker == USER
 
